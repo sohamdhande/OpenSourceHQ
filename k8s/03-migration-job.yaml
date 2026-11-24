@@ -17,7 +17,7 @@ spec:
         runAsGroup: 1001
       containers:
         - name: prisma-migrate
-          image: ghcr.io/REPLACE_GITHUB_OWNER/REPLACE_REPO_NAME:REPLACE_COMMIT_SHA
+          image: ghcr.io/sohamdhande/opensourcehq:6420aab
           imagePullPolicy: IfNotPresent
           command:
             - /app/prisma-cli/node_modules/.bin/prisma
