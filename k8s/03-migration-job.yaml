@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: opensourcehq-prisma-migrate
+  namespace: nst-events
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      # Uncomment imagePullSecrets if the GHCR package is private:
+      # imagePullSecrets:
+      #   - name: ghcr-pull-secret
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+      containers:
+        - name: prisma-migrate
+          image: ghcr.io/REPLACE_GITHUB_OWNER/REPLACE_REPO_NAME:REPLACE_COMMIT_SHA
+          imagePullPolicy: IfNotPresent
+          command:
+            - /app/prisma-cli/node_modules/.bin/prisma
+            - migrate
+            - deploy
+            - --schema=/app/prisma/schema.prisma
+          envFrom:
+            - configMapRef:
+                name: opensourcehq-config
+            - secretRef:
+                name: opensourcehq-secrets
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

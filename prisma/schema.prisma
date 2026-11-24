@@ -1,0 +1,991 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum PlatformRoleType {
+  SUPER_ADMIN
+}
+
+enum OrgRole {
+  ORG_ADMIN
+  MENTOR
+  MENTEE
+  OBSERVER
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  REMOVED
+}
+
+enum CohortStatus {
+  PLANNED
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  ON_BREAK
+  WITHDRAWN
+  COMPLETED
+}
+
+enum ReportVisibility {
+  MENTORS_ONLY
+  COHORT
+}
+
+enum ReportStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  CHANGES_REQUESTED
+  RESUBMITTED
+  REVIEWED
+}
+
+enum ReportReviewDecision {
+  REVIEWED
+  CHANGES_REQUESTED
+}
+
+enum TaskPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum TaskAssignmentStatus {
+  TODO
+  IN_PROGRESS
+  SUBMITTED
+  UNDER_REVIEW
+  CHANGES_REQUESTED
+  RESUBMITTED
+  COMPLETED
+  BLOCKED
+  CANCELLED
+  OVERDUE
+}
+
+enum TaskReviewDecision {
+  ACCEPTED
+  CHANGES_REQUESTED
+}
+
+enum GitHubConnectionStatus {
+  CONNECTED
+  DISCONNECTED
+  REVOKED
+  EXPIRED
+  ERROR
+}
+
+enum RepoSyncStatus {
+  PENDING
+  ACTIVE
+  ERROR
+  PAUSED
+}
+
+enum SuggestionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum GitHubActivityType {
+  COMMIT
+  PULL_REQUEST_OPENED
+  PULL_REQUEST_MERGED
+  PULL_REQUEST_CLOSED
+  ISSUE_OPENED
+  ISSUE_CLOSED
+  REVIEW_SUBMITTED
+  COMMENT_CREATED
+  RELEASE_PUBLISHED
+}
+
+enum WebhookStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+enum MilestoneStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+  CHANGES_REQUESTED
+  RESUBMITTED
+  APPROVED
+}
+
+enum FeedbackCategory {
+  TECHNICAL
+  COLLABORATION
+  COMMUNICATION
+  LEARNING
+  GENERAL
+}
+
+enum FeedbackVisibility {
+  PRIVATE_TO_MENTEE
+  PRIVATE_TO_MENTORS
+  COHORT
+}
+
+enum FeedbackStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  EXCUSED
+  NOT_RECORDED
+}
+
+enum BlockerUrgency {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum BlockerStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  REOPENED
+}
+
+enum BlockerSource {
+  DAILY_REPORT
+  TASK
+  LEARNING_MILESTONE
+  GITHUB
+  GENERAL
+}
+
+enum EventRsvpStatus {
+  YES
+  NO
+  MAYBE
+}
+
+model User {
+  id              String       @id @default(cuid())
+  name            String
+  email           String       @unique
+  emailVerifiedAt DateTime?
+  passwordHash    String?
+  imageUrl        String?
+  timezone        String       @default("UTC")
+  status          UserStatus   @default(ACTIVE)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  platformRole         PlatformRole?
+  memberships          OrganizationMembership[]
+  cohortMentors        CohortMentor[]
+  cohortEnrollments    CohortEnrollment[]
+  dailyReports         DailyReport[]
+  reportReviews        ReportReview[]
+  createdTasks         Task[]                   @relation("TaskCreator")
+  assignedTasks        TaskAssignment[]         @relation("TaskAssignee")
+  taskAssignmentsMade  TaskAssignment[]         @relation("TaskAssigner")
+  taskSubmissions      TaskSubmission[]
+  taskReviews          TaskReview[]
+  githubAccounts       GitHubAccount[]
+  menteeMilestones     MenteeMilestone[]        @relation("MenteeMilestoneUser")
+  reviewedMilestones   MenteeMilestone[]        @relation("MilestoneReviewer")
+  feedbackGiven        Feedback[]               @relation("FeedbackAuthor")
+  feedbackReceived     Feedback[]               @relation("FeedbackMentee")
+  announcements        Announcement[]
+  createdEvents        Event[]
+  attendances          Attendance[]
+  eventRsvps           EventRsvp[]
+  discussions          DiscussionPost[]
+  discussionComments   DiscussionComment[]
+  notifications        Notification[]
+  notificationPref     NotificationPreference?
+  auditLogs            AuditLog[]               @relation("AuditActor")
+  invitationsCreated   Invitation[]             @relation("InvitationCreator")
+  repoSuggestionsMade  RepositorySuggestion[]   @relation("SuggestionAuthor")
+  repoSuggestionsReviewed RepositorySuggestion[] @relation("SuggestionReviewer")
+  blockersRaised       Blocker[]                @relation("BlockerMentee")
+  blockersAssigned     Blocker[]                @relation("BlockerMentor")
+  memberRepositories   UserRepository[]         @relation("MemberChosenRepositories")
+  repositoriesAssignedByMe UserRepository[]     @relation("MemberRepositoryAssigner")
+}
+
+model PlatformRole {
+  id        String           @id @default(cuid())
+  userId    String           @unique
+  role      PlatformRoleType @default(SUPER_ADMIN)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Organization {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  description String?
+  logoUrl     String?
+  timezone    String    @default("UTC")
+  settings    Json      @default("{}")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  archivedAt  DateTime?
+
+  memberships         OrganizationMembership[]
+  cohorts             Cohort[]
+  dailyReports        DailyReport[]
+  tasks               Task[]
+  githubInstallations GitHubInstallation[]
+  repositories        Repository[]
+  repoSuggestions     RepositorySuggestion[]
+  githubActivities    GitHubActivity[]
+  learningPaths       LearningPath[]
+  skills              Skill[]
+  feedbacks           Feedback[]
+  announcements       Announcement[]
+  events              Event[]
+  discussions         DiscussionPost[]
+  auditLogs           AuditLog[]
+  invitations         Invitation[]
+  githubSyncLogs      GitHubSyncLog[]
+  blockers            Blocker[]
+  memberRepositories  UserRepository[]
+}
+
+model OrganizationMembership {
+  id             String           @id @default(cuid())
+  organizationId String
+  userId         String
+  role           OrgRole          @default(MENTEE)
+  status         MembershipStatus @default(ACTIVE)
+  invitedById    String?
+  joinedAt       DateTime?        @default(now())
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([organizationId, role])
+  @@index([userId])
+}
+
+model Invitation {
+  id             String    @id @default(cuid())
+  organizationId String
+  email          String
+  role           OrgRole   @default(MENTEE)
+  cohortId       String?
+  token          String    @unique
+  invitedById    String
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy    User         @relation("InvitationCreator", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, email])
+}
+
+model Cohort {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  slug           String
+  description    String?
+  startDate      DateTime
+  endDate        DateTime
+  timezone       String       @default("UTC")
+  status         CohortStatus @default(ACTIVE)
+  createdById    String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization       Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  mentors            CohortMentor[]
+  enrollments        CohortEnrollment[]
+  dailyReports       DailyReport[]
+  tasks              Task[]
+  cohortRepositories CohortRepository[]
+  repoSuggestions    RepositorySuggestion[]
+  announcements      Announcement[]
+  events             Event[]
+  discussions        DiscussionPost[]
+  blockers           Blocker[]
+  learningPaths      LearningPath[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, status])
+}
+
+model CohortMentor {
+  id         String   @id @default(cuid())
+  cohortId   String
+  mentorId   String
+  assignedAt DateTime @default(now())
+
+  cohort Cohort @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  mentor User   @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+
+  @@unique([cohortId, mentorId])
+  @@index([mentorId])
+}
+
+model CohortEnrollment {
+  id         String           @id @default(cuid())
+  cohortId   String
+  menteeId   String
+  status     EnrollmentStatus @default(ACTIVE)
+  enrolledAt DateTime         @default(now())
+  endedAt    DateTime?
+
+  cohort Cohort @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  mentee User   @relation(fields: [menteeId], references: [id], onDelete: Cascade)
+
+  @@unique([cohortId, menteeId])
+  @@index([menteeId])
+}
+
+model DailyReport {
+  id             String           @id @default(cuid())
+  organizationId String
+  cohortId       String
+  menteeId       String
+  reportDate     DateTime
+  workDone       String
+  learning       String
+  blockers       String?
+  nextSteps      String
+  hoursSpent     Float?
+  visibility     ReportVisibility @default(MENTORS_ONLY)
+  status         ReportStatus     @default(SUBMITTED)
+  submittedAt    DateTime?        @default(now())
+  revisionNotes  String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cohort       Cohort         @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  mentee       User           @relation(fields: [menteeId], references: [id], onDelete: Cascade)
+  links        ReportLink[]
+  reviews      ReportReview[]
+
+  @@unique([cohortId, menteeId, reportDate])
+  @@index([cohortId, reportDate])
+  @@index([menteeId, reportDate])
+  @@index([organizationId, status])
+}
+
+model ReportLink {
+  id        String   @id @default(cuid())
+  reportId  String
+  url       String
+  label     String
+  type      String   @default("GITHUB")
+  createdAt DateTime @default(now())
+
+  report DailyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+}
+
+model ReportReview {
+  id         String               @id @default(cuid())
+  reportId   String
+  reviewerId String
+  status     ReportReviewDecision @default(REVIEWED)
+  comment    String
+  createdAt  DateTime             @default(now())
+
+  report   DailyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  reviewer User        @relation(fields: [reviewerId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+}
+
+model Task {
+  id              String       @id @default(cuid())
+  organizationId  String
+  cohortId        String?
+  title           String
+  description     String
+  priority        TaskPriority @default(NORMAL)
+  category        String       @default("General")
+  createdById     String
+  repositoryId    String?
+  externalIssueUrl String?
+  dueAt           DateTime?
+  acceptanceCriteria String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  archivedAt      DateTime?
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cohort       Cohort?          @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  creator      User             @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  repository   Repository?      @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+  assignments  TaskAssignment[]
+
+  @@index([organizationId, cohortId])
+  @@index([createdById])
+}
+
+model TaskAssignment {
+  id           String               @id @default(cuid())
+  taskId       String
+  menteeId     String
+  status       TaskAssignmentStatus @default(TODO)
+  assignedById String
+  assignedAt   DateTime             @default(now())
+  completedAt  DateTime?
+
+  task        Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  mentee      User             @relation("TaskAssignee", fields: [menteeId], references: [id], onDelete: Cascade)
+  assignedBy  User             @relation("TaskAssigner", fields: [assignedById], references: [id], onDelete: Cascade)
+  submissions TaskSubmission[]
+  reviews     TaskReview[]
+
+  @@unique([taskId, menteeId])
+  @@index([menteeId, status])
+}
+
+model TaskSubmission {
+  id               String   @id @default(cuid())
+  taskAssignmentId String
+  submittedById    String
+  notes            String
+  evidenceUrl      String?
+  submittedAt      DateTime @default(now())
+
+  assignment  TaskAssignment @relation(fields: [taskAssignmentId], references: [id], onDelete: Cascade)
+  submittedBy User           @relation(fields: [submittedById], references: [id], onDelete: Cascade)
+
+  @@index([taskAssignmentId])
+}
+
+model TaskReview {
+  id               String             @id @default(cuid())
+  taskAssignmentId String
+  reviewerId       String
+  decision         TaskReviewDecision @default(ACCEPTED)
+  comment          String
+  createdAt        DateTime           @default(now())
+
+  assignment TaskAssignment @relation(fields: [taskAssignmentId], references: [id], onDelete: Cascade)
+  reviewer   User           @relation(fields: [reviewerId], references: [id], onDelete: Cascade)
+
+  @@index([taskAssignmentId])
+}
+
+model GitHubAccount {
+  id                     String                 @id @default(cuid())
+  userId                 String
+  providerUserId         String                 @unique
+  username               String
+  profileUrl             String
+  avatarUrl              String?
+  verifiedEmail          String?
+  tokenCiphertext        String?
+  refreshTokenCiphertext String?
+  tokenExpiresAt         DateTime?
+  refreshTokenExpiresAt  DateTime?
+  scopes                 Json?
+  connectedAt            DateTime               @default(now())
+  lastSyncedAt           DateTime?
+  lastVerifiedAt         DateTime?              @default(now())
+  connectionStatus       GitHubConnectionStatus @default(CONNECTED)
+
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activities GitHubActivity[]
+
+  @@unique([userId, providerUserId])
+  @@index([username])
+  @@index([providerUserId])
+}
+
+model GitHubInstallation {
+  id                     String    @id @default(cuid())
+  organizationId         String
+  providerInstallationId String    @unique
+  accountLogin           String
+  accountType            String    @default("Organization")
+  permissions            Json?
+  installedAt            DateTime  @default(now())
+  suspendedAt            DateTime?
+  lastSyncedAt           DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+model Repository {
+  id                   String         @id @default(cuid())
+  organizationId       String
+  provider             String         @default("GITHUB")
+  providerRepositoryId String
+  ownerLogin           String
+  name                 String
+  fullName             String
+  url                  String
+  defaultBranch        String         @default("main")
+  visibility           String         @default("public")
+  description          String?
+  syncStatus           RepoSyncStatus @default(ACTIVE)
+  lastSyncedAt         DateTime?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cohortRepositories CohortRepository[]
+  activities         GitHubActivity[]
+  tasks              Task[]
+  memberRepositories UserRepository[]
+
+  @@unique([organizationId, providerRepositoryId])
+  @@index([providerRepositoryId])
+  @@index([organizationId])
+  @@index([fullName])
+}
+
+model CohortRepository {
+  id              String   @id @default(cuid())
+  cohortId        String
+  repositoryId    String
+  addedById       String
+  approvedAt      DateTime @default(now())
+  trackingEnabled Boolean  @default(true)
+
+  cohort     Cohort     @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@unique([cohortId, repositoryId])
+}
+
+model UserRepository {
+  id             String    @id @default(cuid())
+  organizationId String
+  // Keep the existing database column/table names so current selections survive the model generalization.
+  userId         String    @map("menteeId")
+  repositoryId   String
+  assignedById   String?
+  isPrimary      Boolean   @default(false)
+  notes          String?
+  assignedAt     DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation("MemberChosenRepositories", fields: [userId], references: [id], onDelete: Cascade)
+  assignedBy   User?        @relation("MemberRepositoryAssigner", fields: [assignedById], references: [id], onDelete: SetNull)
+  repository   Repository   @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId, repositoryId], map: "UserRepository_organizationId_userId_repositoryId_key")
+  @@index([organizationId, userId], map: "MenteeRepository_organizationId_menteeId_idx")
+  @@index([repositoryId], map: "MenteeRepository_repositoryId_idx")
+  @@map("MenteeRepository")
+}
+
+model RepositorySuggestion {
+  id             String           @id @default(cuid())
+  organizationId String
+  cohortId       String
+  suggestedById  String
+  url            String
+  note           String?
+  status         SuggestionStatus @default(PENDING)
+  reviewedById   String?
+  reviewedAt     DateTime?
+  createdAt      DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cohort       Cohort       @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  suggestedBy  User         @relation("SuggestionAuthor", fields: [suggestedById], references: [id], onDelete: Cascade)
+  reviewedBy   User?        @relation("SuggestionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([cohortId, status])
+}
+
+model GitHubActivity {
+  id              String             @id @default(cuid())
+  organizationId  String
+  repositoryId    String?
+  githubAccountId String?
+  providerEventId String?
+  activityType    GitHubActivityType
+  title           String
+  summary         String?
+  url             String?
+  isFixture       Boolean            @default(false)
+  occurredAt      DateTime
+  receivedAt      DateTime           @default(now())
+  metadata        Json?
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  repository    Repository?    @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+  githubAccount GitHubAccount? @relation(fields: [githubAccountId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, providerEventId])
+  @@index([organizationId, occurredAt])
+  @@index([githubAccountId, occurredAt])
+  @@index([repositoryId, occurredAt])
+}
+
+model WebhookDelivery {
+  id             String        @id @default(cuid())
+  provider       String        @default("GITHUB")
+  deliveryId     String        @unique
+  eventType      String
+  action         String?
+  receivedAt     DateTime      @default(now())
+  processedAt    DateTime?
+  status         WebhookStatus @default(RECEIVED)
+  attemptCount   Int           @default(0)
+  safeErrorCode  String?
+
+  @@index([receivedAt, status])
+}
+
+model GitHubSyncLog {
+  id               String    @id @default(cuid())
+  organizationId   String
+  installationId   String?
+  repositoryId     String?
+  status           String
+  startedAt        DateTime  @default(now())
+  completedAt      DateTime?
+  recordsProcessed Int       @default(0)
+  errorCode        String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, startedAt])
+}
+
+model LearningPath {
+  id             String   @id @default(cuid())
+  organizationId String
+  cohortId       String?
+  title          String
+  description    String?
+  createdById    String
+  visibility     String   @default("ORGANIZATION")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cohort       Cohort?             @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  milestones   LearningMilestone[]
+
+  @@index([organizationId, visibility])
+  @@index([cohortId])
+}
+
+model LearningMilestone {
+  id             String   @id @default(cuid())
+  learningPathId String
+  title          String
+  description    String?
+  sortOrder      Int      @default(0)
+  skillId        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  learningPath     LearningPath      @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
+  skill            Skill?            @relation(fields: [skillId], references: [id], onDelete: SetNull)
+  menteeMilestones MenteeMilestone[]
+
+  @@index([learningPathId, sortOrder])
+}
+
+model Skill {
+  id             String   @id @default(cuid())
+  organizationId String?
+  name           String
+  category       String
+  createdAt      DateTime @default(now())
+
+  organization Organization?       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  milestones   LearningMilestone[]
+
+  @@index([organizationId, category])
+}
+
+model MenteeMilestone {
+  id           String          @id @default(cuid())
+  menteeId     String
+  milestoneId  String
+  status       MilestoneStatus @default(NOT_STARTED)
+  evidenceUrl  String?
+  notes        String?
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewComment String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  mentee     User              @relation("MenteeMilestoneUser", fields: [menteeId], references: [id], onDelete: Cascade)
+  milestone  LearningMilestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  reviewedBy User?             @relation("MilestoneReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@unique([menteeId, milestoneId])
+  @@index([menteeId, status])
+}
+
+model Feedback {
+  id                  String             @id @default(cuid())
+  organizationId      String
+  menteeId            String
+  authorId            String
+  category            FeedbackCategory   @default(GENERAL)
+  content             String
+  technicalStrengths  String?
+  areasForImprovement String?
+  codeQuality         String?
+  communication       String?
+  collaboration       String?
+  problemSolving      String?
+  consistency         String?
+  recommendations     String?
+  privateNotes        String?
+  status              FeedbackStatus     @default(PUBLISHED)
+  visibility          FeedbackVisibility @default(PRIVATE_TO_MENTEE)
+  menteeResponse      String?
+  acknowledgedAt      DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  deletedAt           DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  mentee       User         @relation("FeedbackMentee", fields: [menteeId], references: [id], onDelete: Cascade)
+  author       User         @relation("FeedbackAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([menteeId, visibility])
+  @@index([organizationId, createdAt])
+}
+
+model Announcement {
+  id             String    @id @default(cuid())
+  organizationId String
+  cohortId       String?
+  authorId       String
+  title          String
+  body           String
+  isPinned       Boolean   @default(false)
+  publishedAt    DateTime  @default(now())
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cohort       Cohort?      @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  author       User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, cohortId])
+}
+
+model Event {
+  id             String   @id @default(cuid())
+  organizationId String
+  cohortId       String?
+  title          String
+  description    String?
+  startsAt       DateTime
+  endsAt         DateTime
+  timezone       String   @default("UTC")
+  meetingUrl     String?
+  location       String?
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cohort       Cohort?      @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  createdBy    User         @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  attendances  Attendance[]
+  rsvps        EventRsvp[]
+
+  @@index([organizationId, startsAt])
+}
+
+model Attendance {
+  id           String           @id @default(cuid())
+  eventId      String
+  userId       String
+  status       AttendanceStatus @default(NOT_RECORDED)
+  note         String?
+  recordedById String
+  recordedAt   DateTime         @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([userId, status])
+}
+
+model EventRsvp {
+  id                String          @id @default(cuid())
+  eventId           String
+  userId            String
+  status            EventRsvpStatus @default(YES)
+  notes             String?
+  isExcuseRequested Boolean         @default(false)
+  excuseReason      String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([eventId, status])
+}
+
+model Blocker {
+  id               String         @id @default(cuid())
+  organizationId   String
+  cohortId         String?
+  menteeId         String
+  mentorId         String?
+  title            String
+  description      String
+  category         String         @default("General")
+  urgency          BlockerUrgency @default(MEDIUM)
+  status           BlockerStatus  @default(OPEN)
+  source           BlockerSource  @default(GENERAL)
+  sourceId         String?
+  response         String?
+  createdAt        DateTime       @default(now())
+  firstRespondedAt DateTime?
+  resolvedAt       DateTime?
+  updatedAt        DateTime       @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cohort       Cohort?      @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  mentee       User         @relation("BlockerMentee", fields: [menteeId], references: [id], onDelete: Cascade)
+  mentor       User?        @relation("BlockerMentor", fields: [mentorId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@index([menteeId, status])
+  @@index([mentorId, status])
+  @@unique([organizationId, menteeId, source, sourceId], map: "Blocker_organizationId_menteeId_source_sourceId_key")
+}
+
+model DiscussionPost {
+  id               String   @id @default(cuid())
+  organizationId   String
+  cohortId         String?
+  authorId         String
+  title            String
+  content          String
+  isPinned         Boolean  @default(false)
+  isLocked         Boolean  @default(false)
+  isModerated      Boolean  @default(false)
+  moderationReason String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cohort       Cohort?             @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  author       User                @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments     DiscussionComment[]
+
+  @@index([organizationId, cohortId, createdAt])
+}
+
+model DiscussionComment {
+  id          String   @id @default(cuid())
+  postId      String
+  parentId    String?
+  authorId    String
+  content     String
+  isModerated Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  post    DiscussionPost      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author  User                @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent  DiscussionComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies DiscussionComment[] @relation("CommentReplies")
+
+  @@index([postId, createdAt])
+  @@index([parentId])
+}
+
+model Notification {
+  id             String    @id @default(cuid())
+  organizationId String?
+  userId         String
+  type           String
+  title          String
+  body           String
+  targetUrl      String?
+  dedupeKey      String?   @unique
+  readAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}
+
+model NotificationPreference {
+  id                     String   @id @default(cuid())
+  userId                 String   @unique
+  emailOnTaskAssignment  Boolean  @default(true)
+  emailOnReportReview    Boolean  @default(true)
+  emailOnFeedback        Boolean  @default(true)
+  emailOnAnnouncement    Boolean  @default(true)
+  inAppNotifications     Boolean  @default(true)
+  updatedAt              DateTime @default(now()) @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String?
+  actorId        String?
+  action         String
+  targetType     String
+  targetId       String
+  metadata       Json?
+  requestId      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  actor        User?         @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([actorId, createdAt])
+}

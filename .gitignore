@@ -1,0 +1,17 @@
+node_modules
+.next
+out
+.env
+*.log
+.DS_Store
+dist
+coverage
+*.pem
+.certs
+
+.env.*
+!.env.example
+!.env.production.example
+
+
+*.tsbuildinfo

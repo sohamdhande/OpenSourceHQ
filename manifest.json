@@ -1,0 +1,35 @@
+{
+  "product": "OpenSourceHQ",
+  "version": "1.0",
+  "ai_in_scope": false,
+  "files": [
+    ".agent/rules/project.md",
+    "AGENTS.md",
+    "GEMINI.md",
+    "README.md",
+    "docs/ACCEPTANCE_AND_TESTING.md",
+    "docs/API_SPEC.md",
+    "docs/ARCHITECTURE.md",
+    "docs/BUILD_NOTES.md",
+    "docs/DATA_MODEL.md",
+    "docs/ENVIRONMENT.md",
+    "docs/GITHUB_INTEGRATION.md",
+    "docs/IMPLEMENTATION_PLAN.md",
+    "docs/PRD.md",
+    "docs/SECURITY.md",
+    "docs/UX_AND_ROUTES.md",
+    "prompts/BUILD_IN_ONE_GO.md"
+  ],
+  "canonical_docs": [
+    "docs/PRD.md",
+    "docs/ARCHITECTURE.md",
+    "docs/DATA_MODEL.md",
+    "docs/UX_AND_ROUTES.md",
+    "docs/API_SPEC.md",
+    "docs/GITHUB_INTEGRATION.md",
+    "docs/SECURITY.md",
+    "docs/ACCEPTANCE_AND_TESTING.md",
+    "docs/IMPLEMENTATION_PLAN.md",
+    "docs/ENVIRONMENT.md"
+  ]
+}
