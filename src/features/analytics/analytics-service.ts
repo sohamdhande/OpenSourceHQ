@@ -99,7 +99,7 @@ export async function getOrganizationAnalytics(organizationId: string) {
       prisma.cohortMentor.findMany({
         where: {
           cohortId: { in: cohortIds },
-          mentor: { memberships: { some: { organizationId, role: "MENTOR", status: "ACTIVE" } } },
+          mentor: { memberships: { some: { organizationId, role: { in: ["MENTOR", "ORG_ADMIN"] }, status: "ACTIVE" } } },
         },
         select: { cohortId: true },
       }),
@@ -315,7 +315,7 @@ export async function getMentorAnalytics(user: SessionUser, organizationId: stri
     where: {
       mentorId: user.id,
       cohort: { organizationId, status: "ACTIVE" },
-      mentor: { memberships: { some: { organizationId, role: "MENTOR", status: "ACTIVE" } } },
+      mentor: { memberships: { some: { organizationId, role: { in: ["MENTOR", "ORG_ADMIN"] }, status: "ACTIVE" } } },
     },
     include: {
       cohort: {

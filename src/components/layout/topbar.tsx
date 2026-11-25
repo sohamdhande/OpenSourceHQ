@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Command, LogOut, Moon, Plus, Search, Sparkles, Sun, X } from "lucide-react";
+import { Command, GraduationCap, LogOut, Moon, Plus, Search, ShieldCheck, Sparkles, Sun, X } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
 import { SessionUser } from "@/server/auth/session";
@@ -56,27 +56,31 @@ export function Topbar({ user, orgSlug }: TopbarProps) {
     };
   }, [commandOpen]);
 
+  const isAdmin = user.activeOrgRole === "ORG_ADMIN" || Boolean(user.isPlatformSuperAdmin);
+  const isMentorView = isAdmin ? pathname.startsWith(`/org/${orgSlug}/mentor`) : user.activeOrgRole === "MENTOR";
   const isMentee = user.activeOrgRole === "MENTEE" || (!user.activeOrgRole && !user.isPlatformSuperAdmin);
   const quickAction = isMentee
     ? { href: `/org/${orgSlug}/student/daily-log`, label: "Submit daily log", icon: Plus }
-    : user.activeOrgRole === "MENTOR"
+    : isMentorView
       ? { href: `/org/${orgSlug}/mentor/reports`, label: "Review reports", icon: Sparkles }
       : user.activeOrgRole === "OBSERVER"
         ? null
         : { href: `/org/${orgSlug}/admin/members`, label: "Manage members", icon: Plus };
 
   const destinations = useMemo(() => {
-    const items = user.activeOrgRole === "MENTOR" ? [
+    const items = isMentorView ? [
       { href: `/org/${orgSlug}/mentor`, label: "Mentor overview", detail: "Workspace home" },
       { href: `/org/${orgSlug}/mentor/mentees`, label: "Assigned mentees", detail: "People and progress" },
       { href: `/org/${orgSlug}/mentor/reports`, label: "Review reports", detail: "Daily submissions" },
       { href: `/org/${orgSlug}/mentor/tasks`, label: "Manage tasks", detail: "Assignments and reviews" },
-    ] : user.activeOrgRole === "ORG_ADMIN" || user.isPlatformSuperAdmin ? [
+      ...(isAdmin ? [{ href: `/org/${orgSlug}/admin`, label: "Switch to Admin view", detail: "Organization governance" }] : []),
+    ] : isAdmin ? [
       { href: `/org/${orgSlug}/admin`, label: "Admin overview", detail: "Program status" },
       { href: `/org/${orgSlug}/admin/members`, label: "Members", detail: "People and access" },
       { href: `/org/${orgSlug}/admin/cohorts`, label: "Cohorts", detail: "Mentorship groups" },
       { href: `/org/${orgSlug}/admin/repositories`, label: "Repositories", detail: "Tracked projects" },
       { href: `/org/${orgSlug}/admin/integrations/github`, label: "GitHub App", detail: "Installation and sync" },
+      { href: `/org/${orgSlug}/mentor`, label: "Switch to Mentor view", detail: "Mentorship & reviews" },
     ] : user.activeOrgRole === "OBSERVER" ? [
       { href: `/org/${orgSlug}/observer`, label: "Program overview", detail: "Read-only organization updates" },
     ] : [
@@ -88,7 +92,7 @@ export function Topbar({ user, orgSlug }: TopbarProps) {
     ];
     const q = commandQuery.trim().toLowerCase();
     return q ? items.filter((item) => `${item.label} ${item.detail}`.toLowerCase().includes(q)) : items;
-  }, [commandQuery, orgSlug, user.activeOrgRole, user.isPlatformSuperAdmin]);
+  }, [commandQuery, isAdmin, isMentorView, orgSlug, user.activeOrgRole]);
 
   const signOut = async () => {
     setLoggingOut(true);
@@ -114,6 +118,40 @@ export function Topbar({ user, orgSlug }: TopbarProps) {
         </button>
       </div>
       <div className="flex items-center gap-2 md:gap-3">
+        {isAdmin && (
+          <div
+            role="group"
+            aria-label="Switch workspace view"
+            className="inline-flex h-8 items-center rounded-md border border-border bg-secondary/60 p-0.5"
+          >
+            <Link
+              href={`/org/${orgSlug}/admin`}
+              aria-current={!isMentorView ? "page" : undefined}
+              className={`inline-flex h-7 items-center gap-1.5 rounded px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+                !isMentorView
+                  ? "bg-card text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              title="Switch to Organization Admin view"
+            >
+              <ShieldCheck className={`h-3.5 w-3.5 ${!isMentorView ? "text-purple-500" : ""}`} />
+              <span className="hidden sm:inline">Admin</span>
+            </Link>
+            <Link
+              href={`/org/${orgSlug}/mentor`}
+              aria-current={isMentorView ? "page" : undefined}
+              className={`inline-flex h-7 items-center gap-1.5 rounded px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+                isMentorView
+                  ? "bg-card text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              title="Switch to Mentor view"
+            >
+              <GraduationCap className={`h-3.5 w-3.5 ${isMentorView ? "text-emerald-500" : ""}`} />
+              <span className="hidden sm:inline">Mentor</span>
+            </Link>
+          </div>
+        )}
         {quickAction && (
           <Link
             href={quickAction.href}

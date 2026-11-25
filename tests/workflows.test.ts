@@ -14,6 +14,7 @@ import {
 import { createBlocker, resolveBlocker, reopenBlocker } from "@/features/blockers/blockers-service";
 import { createTask, submitTaskAssignment, reviewTaskAssignment } from "@/features/tasks/tasks-service";
 import { verifyWebhookSignature, processWebhookDelivery } from "@/features/github/github-service";
+import { getMentorAnalytics } from "@/features/analytics/analytics-service";
 import { createHmac } from "crypto";
 
 describe("OpenSourceHQ — Core Workflows Integration Suite (A through K)", () => {
@@ -591,5 +592,40 @@ describe("OpenSourceHQ — Core Workflows Integration Suite (A through K)", () =
     // Clean up
     await prisma.organizationMembership.delete({ where: { id: membership.id } });
     await prisma.user.delete({ where: { id: testUser.id } });
+  });
+
+  // Workflow L: Organization Admin can also act as a Cohort Mentor
+  it("Workflow L: Organization Admin can be assigned as cohort mentor and access mentor analytics", async () => {
+    const existingAssignment = await prisma.cohortMentor.findUnique({
+      where: { cohortId_mentorId: { cohortId: cohort.id, mentorId: adminUser.id } },
+    });
+
+    if (!existingAssignment) {
+      await prisma.cohortMentor.create({
+        data: { cohortId: cohort.id, mentorId: adminUser.id },
+      });
+    }
+
+    try {
+      const mentorMembershipMatches = await prisma.organizationMembership.findMany({
+        where: {
+          organizationId: org.id,
+          userId: { in: [adminUser.id] },
+          status: "ACTIVE",
+          role: { in: ["MENTOR", "ORG_ADMIN"] },
+        },
+        select: { userId: true },
+      });
+      expect(mentorMembershipMatches).toHaveLength(1);
+
+      const analytics = await getMentorAnalytics(adminSession, org.id);
+      expect(analytics.cohorts.length).toBeGreaterThanOrEqual(1);
+    } finally {
+      if (!existingAssignment) {
+        await prisma.cohortMentor.delete({
+          where: { cohortId_mentorId: { cohortId: cohort.id, mentorId: adminUser.id } },
+        });
+      }
+    }
   });
 });

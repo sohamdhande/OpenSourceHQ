@@ -73,11 +73,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { orgId: str
     const menteeIds = data.menteeIds === undefined ? undefined : [...new Set(data.menteeIds)];
     const repositoryIds = data.repositoryIds === undefined ? undefined : [...new Set(data.repositoryIds)];
     const [mentors, mentees, repositories] = await Promise.all([
-      mentorIds ? prisma.organizationMembership.findMany({ where: { organizationId: params.orgId, userId: { in: mentorIds }, status: "ACTIVE", role: "MENTOR" }, select: { userId: true } }) : Promise.resolve([]),
+      mentorIds ? prisma.organizationMembership.findMany({ where: { organizationId: params.orgId, userId: { in: mentorIds }, status: "ACTIVE", role: { in: ["MENTOR", "ORG_ADMIN"] } }, select: { userId: true } }) : Promise.resolve([]),
       menteeIds ? prisma.organizationMembership.findMany({ where: { organizationId: params.orgId, userId: { in: menteeIds }, status: "ACTIVE", role: "MENTEE" }, select: { userId: true } }) : Promise.resolve([]),
       repositoryIds ? prisma.repository.findMany({ where: { organizationId: params.orgId, id: { in: repositoryIds } }, select: { id: true } }) : Promise.resolve([]),
     ]);
-    if (mentorIds && mentors.length !== mentorIds.length) return apiError("INVALID_MENTORS", "Every assigned mentor must be an active mentor in this organization.", 400);
+    if (mentorIds && mentors.length !== mentorIds.length) return apiError("INVALID_MENTORS", "Every assigned mentor must be an active mentor or administrator in this organization.", 400);
     if (menteeIds && mentees.length !== menteeIds.length) return apiError("INVALID_MENTEES", "Every enrolled mentee must be an active mentee in this organization.", 400);
     if (repositoryIds && repositories.length !== repositoryIds.length) return apiError("INVALID_REPOSITORIES", "Every selected repository must belong to this organization.", 400);
 

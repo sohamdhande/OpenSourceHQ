@@ -45,11 +45,41 @@ interface NavSection {
 export function Sidebar({ user, orgSlug }: SidebarProps) {
   const pathname = usePathname();
   const role = user.activeOrgRole;
+  const isAdmin = role === "ORG_ADMIN" || Boolean(user.isPlatformSuperAdmin);
+  const isMentorView = isAdmin ? pathname.startsWith(`/org/${orgSlug}/mentor`) : role === "MENTOR";
   const isMentee = role === "MENTEE" || (!role && !user.isPlatformSuperAdmin) || pathname.includes("/student");
 
   let sections: NavSection[] = [];
 
-  if (role === "ORG_ADMIN" || user.isPlatformSuperAdmin) {
+  if (isMentorView) {
+    sections = [
+      {
+        title: "OVERVIEW",
+        links: [
+          { href: `/org/${orgSlug}/mentor`, label: "Workspace Overview", icon: LayoutDashboard },
+          { href: `/org/${orgSlug}/mentor/cohorts`, label: "My Cohorts", icon: Layers },
+          { href: `/org/${orgSlug}/mentor/mentees`, label: "Assigned Mentees", icon: GraduationCap },
+          { href: `/org/${orgSlug}/mentor/learning`, label: "Learning Paths", icon: Award },
+        ],
+      },
+      {
+        title: "REVIEWS & TRIAGE",
+        links: [
+          { href: `/org/${orgSlug}/mentor/reports`, label: "Review Reports", icon: FileText },
+          { href: `/org/${orgSlug}/mentor/blockers`, label: "Blocker Triage", icon: AlertCircle },
+          { href: `/org/${orgSlug}/mentor/tasks`, label: "Manage Tasks", icon: CheckSquare },
+          { href: `/org/${orgSlug}/mentor/reviews`, label: "Feedback & Reviews", icon: HeartHandshake },
+        ],
+      },
+      {
+        title: "TELEMETRY",
+        links: [
+          { href: `/org/${orgSlug}/mentor/analytics`, label: "Cohort Analytics", icon: BarChart3 },
+          { href: `/org/${orgSlug}/mentor/events`, label: "Syncs & Events", icon: Calendar },
+        ],
+      },
+    ];
+  } else if (isAdmin) {
     sections = [
       {
         title: "OVERVIEW",
@@ -85,34 +115,6 @@ export function Sidebar({ user, orgSlug }: SidebarProps) {
           { href: `/org/${orgSlug}/admin/integrations/gmail`, label: "Gmail Integration", icon: Mail },
           { href: `/org/${orgSlug}/admin/audit`, label: "Audit Logs", icon: ShieldAlert },
           { href: `/org/${orgSlug}/admin/settings`, label: "Settings", icon: Settings },
-        ],
-      },
-    ];
-  } else if (role === "MENTOR") {
-    sections = [
-      {
-        title: "OVERVIEW",
-        links: [
-          { href: `/org/${orgSlug}/mentor`, label: "Workspace Overview", icon: LayoutDashboard },
-          { href: `/org/${orgSlug}/mentor/cohorts`, label: "My Cohorts", icon: Layers },
-          { href: `/org/${orgSlug}/mentor/mentees`, label: "Assigned Mentees", icon: GraduationCap },
-          { href: `/org/${orgSlug}/mentor/learning`, label: "Learning Paths", icon: Award },
-        ],
-      },
-      {
-        title: "REVIEWS & TRIAGE",
-        links: [
-          { href: `/org/${orgSlug}/mentor/reports`, label: "Review Reports", icon: FileText },
-          { href: `/org/${orgSlug}/mentor/blockers`, label: "Blocker Triage", icon: AlertCircle },
-          { href: `/org/${orgSlug}/mentor/tasks`, label: "Manage Tasks", icon: CheckSquare },
-          { href: `/org/${orgSlug}/mentor/reviews`, label: "Feedback & Reviews", icon: HeartHandshake },
-        ],
-      },
-      {
-        title: "TELEMETRY",
-        links: [
-          { href: `/org/${orgSlug}/mentor/analytics`, label: "Cohort Analytics", icon: BarChart3 },
-          { href: `/org/${orgSlug}/mentor/events`, label: "Syncs & Events", icon: Calendar },
         ],
       },
     ];
@@ -274,7 +276,7 @@ export function Sidebar({ user, orgSlug }: SidebarProps) {
                   roleColors[role as keyof typeof roleColors] || "bg-muted text-muted-foreground border-border"
                 )}
               >
-                {roleLabels[role as keyof typeof roleLabels] || "GUEST"}
+                {isAdmin && isMentorView ? "Admin · Mentor" : roleLabels[role as keyof typeof roleLabels] || "GUEST"}
               </span>
             </div>
           </div>

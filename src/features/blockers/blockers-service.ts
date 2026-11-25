@@ -24,7 +24,7 @@ export async function createBlocker(user: SessionUser, input: CreateBlockerInput
   const enrollments = await prisma.cohortEnrollment.findMany({
     where: { menteeId: user.id, status: "ACTIVE", cohort: { organizationId: input.organizationId, status: "ACTIVE" } },
     include: { cohort: { include: { mentors: {
-      where: { mentor: { memberships: { some: { organizationId: input.organizationId, role: "MENTOR", status: "ACTIVE" } } } },
+      where: { mentor: { memberships: { some: { organizationId: input.organizationId, role: { in: ["MENTOR", "ORG_ADMIN"] }, status: "ACTIVE" } } } },
       orderBy: { assignedAt: "asc" },
     } } } },
   });

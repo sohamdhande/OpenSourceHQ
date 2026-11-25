@@ -44,7 +44,7 @@ export async function submitMilestoneEvidence(user: SessionUser, milestoneId: st
           status: "ACTIVE",
           enrollments: { some: { menteeId: user.id, status: "ACTIVE" } },
         },
-        mentor: { memberships: { some: { organizationId, role: "MENTOR", status: "ACTIVE" } } },
+        mentor: { memberships: { some: { organizationId, role: { in: ["MENTOR", "ORG_ADMIN"] }, status: "ACTIVE" } } },
       },
       select: { mentorId: true },
     }),

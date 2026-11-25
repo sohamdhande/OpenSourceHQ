@@ -40,7 +40,7 @@ export default async function MentorDashboardPage({ params }: { params: { orgSlu
     where: {
       mentorId: session.id,
       cohort: { organizationId: org.id, status: "ACTIVE" },
-      mentor: { memberships: { some: { organizationId: org.id, role: "MENTOR", status: "ACTIVE" } } },
+      mentor: { memberships: { some: { organizationId: org.id, role: { in: ["MENTOR", "ORG_ADMIN"] }, status: "ACTIVE" } } },
     },
     select: { cohortId: true },
   });
