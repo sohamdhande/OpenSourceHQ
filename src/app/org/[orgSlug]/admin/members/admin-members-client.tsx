@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { formatDate } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -129,6 +130,13 @@ export function AdminMembersClient({
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("ALL");
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
+  const [dropdownCoords, setDropdownCoords] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    width: number;
+  } | null>(null);
+  const [mounted, setMounted] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Invite form
@@ -138,24 +146,69 @@ export function AdminMembersClient({
   const [submittingInvite, setSubmittingInvite] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
-  // Close dropdown on outside click or escape
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const toggleRoleDropdown = (e: React.MouseEvent<HTMLButtonElement>, memberId: string) => {
+    e.stopPropagation();
+    if (activeDropdownId === memberId) {
+      setActiveDropdownId(null);
+      setDropdownCoords(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const approxMenuHeight = 280;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUpwards = spaceBelow < approxMenuHeight && rect.top > approxMenuHeight;
+
+    // Constrain horizontally within viewport
+    const menuWidth = 264;
+    const left = Math.max(12, Math.min(rect.left, window.innerWidth - menuWidth - 12));
+
+    setDropdownCoords({
+      ...(openUpwards
+        ? { bottom: window.innerHeight - rect.top + 6 }
+        : { top: rect.bottom + 6 }),
+      left,
+      width: menuWidth,
+    });
+    setActiveDropdownId(memberId);
+  };
+
+  // Close dropdown on outside click, escape, or scrolling
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as HTMLElement | null;
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(target as Node) &&
+        !target?.closest("[data-role-trigger]")
+      ) {
         setActiveDropdownId(null);
+        setDropdownCoords(null);
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setActiveDropdownId(null);
+        setDropdownCoords(null);
       }
+    };
+    const handleScrollOrResize = () => {
+      setActiveDropdownId(null);
+      setDropdownCoords(null);
     };
 
     document.addEventListener("mousedown", handleClickOutside);
     document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("scroll", handleScrollOrResize, true);
+    window.addEventListener("resize", handleScrollOrResize);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("scroll", handleScrollOrResize, true);
+      window.removeEventListener("resize", handleScrollOrResize);
     };
   }, []);
 
@@ -491,16 +544,12 @@ export function AdminMembersClient({
 
                         {/* Interactive Role Dropdown Pill */}
                         <td className="py-3 px-4">
-                          <div
-                            className="relative inline-block text-left"
-                            ref={isDropdownOpen ? dropdownRef : null}
-                          >
+                          <div className="relative inline-block text-left">
                             <button
                               type="button"
+                              data-role-trigger
                               disabled={isLoading}
-                              onClick={() =>
-                                setActiveDropdownId(isDropdownOpen ? null : m.id)
-                              }
+                              onClick={(e) => toggleRoleDropdown(e, m.id)}
                               className={cn(
                                 "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono font-medium border transition-all cursor-pointer select-none",
                                 roleConfig.badgeClass,
@@ -516,64 +565,6 @@ export function AdminMembersClient({
                               <span className="font-semibold">{roleConfig.shortLabel}</span>
                               <ChevronDown className="w-3 h-3 opacity-60 ml-0.5" />
                             </button>
-
-                            {/* Precision Floating Role Menu */}
-                            {isDropdownOpen && (
-                              <div
-                                className="absolute left-0 mt-1.5 w-64 rounded-md border border-border bg-popover text-popover-foreground shadow-2xl z-50 p-1.5 divide-y divide-border/40 animate-in fade-in-50 zoom-in-95"
-                                role="menu"
-                                aria-orientation="vertical"
-                              >
-                                <div className="px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground font-semibold">
-                                  Assign Member Role
-                                </div>
-                                <div className="py-1 space-y-0.5">
-                                  {Object.values(ROLES).map((r) => {
-                                    const isCurrent = m.role === r.value;
-                                    const OptionIcon = r.icon;
-                                    return (
-                                      <button
-                                        key={r.value}
-                                        type="button"
-                                        disabled={isLoading || isCurrent}
-                                        onClick={() => {
-                                          handleRoleChange(m.id, r.value);
-                                          setActiveDropdownId(null);
-                                        }}
-                                        className={cn(
-                                          "w-full text-left p-2 rounded flex items-start gap-2.5 transition-colors text-xs font-sans",
-                                          isCurrent
-                                            ? "bg-secondary/80 text-foreground cursor-default"
-                                            : "hover:bg-muted text-foreground/90 cursor-pointer"
-                                        )}
-                                      >
-                                        <div
-                                          className={cn(
-                                            "p-1 rounded border flex-shrink-0 mt-0.5",
-                                            r.badgeClass
-                                          )}
-                                        >
-                                          <OptionIcon className="w-3 h-3" />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                          <div className="flex items-center justify-between">
-                                            <span className="font-semibold text-xs text-foreground">
-                                              {r.label}
-                                            </span>
-                                            {isCurrent && (
-                                              <Check className="w-3.5 h-3.5 text-primary stroke-[2.5]" />
-                                            )}
-                                          </div>
-                                          <p className="text-[10px] text-muted-foreground leading-snug line-clamp-2 mt-0.5">
-                                            {r.description}
-                                          </p>
-                                        </div>
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            )}
                           </div>
                         </td>
 
@@ -650,6 +641,82 @@ export function AdminMembersClient({
           </div>
         </CardContent>
       </Card>
+
+      {/* Role Assignment Portal Modal (Fixed in Body, immune to overflow clipping) */}
+      {mounted && activeDropdownId && dropdownCoords && (() => {
+        const member = members.find((x) => x.id === activeDropdownId);
+        if (!member) return null;
+        const isLoading = actionLoadingId === member.id;
+
+        return createPortal(
+          <div
+            ref={dropdownRef}
+            style={{
+              position: "fixed",
+              top: dropdownCoords.top !== undefined ? `${dropdownCoords.top}px` : undefined,
+              bottom: dropdownCoords.bottom !== undefined ? `${dropdownCoords.bottom}px` : undefined,
+              left: `${dropdownCoords.left}px`,
+              width: `${dropdownCoords.width}px`,
+              zIndex: 9999,
+            }}
+            className="rounded-lg border border-border bg-popover text-popover-foreground shadow-2xl p-1.5 divide-y divide-border/40 animate-in fade-in-50 zoom-in-95 duration-100"
+            role="menu"
+            aria-orientation="vertical"
+          >
+            <div className="px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground font-semibold flex items-center justify-between">
+              <span>Assign Member Role</span>
+              <span className="text-[9px] text-muted-foreground/60 lowercase">esc to close</span>
+            </div>
+            <div className="py-1 space-y-0.5">
+              {Object.values(ROLES).map((r) => {
+                const isCurrent = member.role === r.value;
+                const OptionIcon = r.icon;
+                return (
+                  <button
+                    key={r.value}
+                    type="button"
+                    disabled={isLoading || isCurrent}
+                    onClick={() => {
+                      handleRoleChange(member.id, r.value);
+                      setActiveDropdownId(null);
+                      setDropdownCoords(null);
+                    }}
+                    className={cn(
+                      "w-full text-left p-2 rounded-md flex items-start gap-2.5 transition-colors text-xs font-sans",
+                      isCurrent
+                        ? "bg-secondary/80 text-foreground cursor-default"
+                        : "hover:bg-muted text-foreground/90 cursor-pointer"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "p-1 rounded border flex-shrink-0 mt-0.5",
+                        r.badgeClass
+                      )}
+                    >
+                      <OptionIcon className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-xs text-foreground">
+                          {r.label}
+                        </span>
+                        {isCurrent && (
+                          <Check className="w-3.5 h-3.5 text-primary stroke-[2.5]" />
+                        )}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground leading-snug line-clamp-2 mt-0.5">
+                        {r.description}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>,
+          document.body
+        );
+      })()}
 
       {/* Pending Invitations */}
       <Card className="overflow-hidden border-border/80">

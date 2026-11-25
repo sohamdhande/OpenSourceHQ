@@ -17,13 +17,16 @@ spec:
         runAsGroup: 1001
       containers:
         - name: prisma-migrate
-          image: ghcr.io/sohamdhande/opensourcehq:6420aab
+          image: ghcr.io/sohamdhande/opensourcehq:6d8c3cb
           imagePullPolicy: IfNotPresent
           command:
-            - /app/prisma-cli/node_modules/.bin/prisma
-            - migrate
-            - deploy
-            - --schema=/app/prisma/schema.prisma
+            - sh
+            - -c
+            - |
+              /app/prisma-cli/node_modules/.bin/prisma db push --schema=/app/prisma/schema.prisma --skip-generate && \
+              for m in 20261124210000_repository_membership_uniques 20261124220000_learning_path_scope_and_reviews 20261124230000_blocker_source_dedup 20261124240000_member_repository_primary; do
+                /app/prisma-cli/node_modules/.bin/prisma migrate resolve --schema=/app/prisma/schema.prisma --applied "$m" || true
+              done
           envFrom:
             - configMapRef:
                 name: opensourcehq-config
