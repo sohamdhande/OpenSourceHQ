@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: opensourcehq-postgres-netpol
+  namespace: nst-events
+spec:
+  podSelector:
+    matchLabels:
+      app: opensourcehq-postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: opensourcehq-app
+        - podSelector:
+            matchLabels:
+              app: opensourcehq-postgres-backup
+        - podSelector:
+            matchLabels:
+              job-name: opensourcehq-prisma-migrate
+      ports:
+        - protocol: TCP
+          port: 5432
+

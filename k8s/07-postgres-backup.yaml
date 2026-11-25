@@ -1,0 +1,115 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: opensourcehq-postgres-backups
+  namespace: nst-events
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: opensourcehq-postgres-backup
+  namespace: nst-events
+spec:
+  # Run every 6 hours (00:00, 06:00, 12:00, 18:00 UTC)
+  schedule: "0 */6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      activeDeadlineSeconds: 1800
+      template:
+        metadata:
+          labels:
+            app: opensourcehq-postgres-backup
+        spec:
+          restartPolicy: OnFailure
+          affinity:
+            nodeAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 80
+                  preference:
+                    matchExpressions:
+                      - key: kubernetes.io/hostname
+                        operator: In
+                        values:
+                          - nst-n6
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: kubernetes.io/hostname
+                        operator: NotIn
+                        values:
+                          - nst-n1
+          containers:
+            - name: postgres-backup
+              image: postgres:16-bookworm
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: PGHOST
+                  value: opensourcehq-postgres
+                - name: POSTGRES_DB
+                  valueFrom:
+                    secretKeyRef:
+                      name: opensourcehq-secrets
+                      key: POSTGRES_DB
+                - name: POSTGRES_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: opensourcehq-secrets
+                      key: POSTGRES_USER
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: opensourcehq-secrets
+                      key: POSTGRES_PASSWORD
+                - name: BACKUP_DIR
+                  value: /backups
+                - name: RETENTION_DAYS
+                  value: "7"
+              command: ["/bin/bash", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  mkdir -p "$BACKUP_DIR"
+                  TS=$(date -u +%Y%m%dT%H%M%SZ)
+                  FILE="$BACKUP_DIR/opensourcehq_${TS}.dump"
+
+                  echo ">>> [$(date -u)] Starting PostgreSQL dump to ${FILE}..."
+                  pg_dump -Fc -h "$PGHOST" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "$FILE"
+
+                  echo ">>> Verifying dump catalog integrity..."
+                  pg_restore -l "$FILE" > /dev/null
+                  DUMP_SIZE=$(wc -c < "$FILE")
+                  echo ">>> [VERIFIED] Valid dump catalog: ${FILE} (${DUMP_SIZE} bytes)"
+
+                  sha256sum "$FILE" > "${FILE}.sha256"
+
+                  echo ">>> Pruning backups older than ${RETENTION_DAYS} days..."
+                  find "$BACKUP_DIR" -maxdepth 1 -name "opensourcehq_*.dump*" -mtime +"$RETENTION_DAYS" -type f -delete || true
+
+                  echo ">>> Current backups on volume:"
+                  ls -lh "$BACKUP_DIR"
+                  echo ">>> Backup completed successfully."
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi
+              volumeMounts:
+                - name: backup-storage
+                  mountPath: /backups
+          volumes:
+            - name: backup-storage
+              persistentVolumeClaim:
+                claimName: opensourcehq-postgres-backups
+

@@ -6,7 +6,7 @@ metadata:
   labels:
     app: opensourcehq-app
 spec:
-  replicas: 1
+  replicas: 2
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -21,9 +21,39 @@ spec:
         app: opensourcehq-app
     spec:
       restartPolicy: Always
-      # Uncomment imagePullSecrets if the GHCR package is private:
-      # imagePullSecrets:
-      #   - name: ghcr-pull-secret
+      automountServiceAccountToken: false
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 80
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - nst-n6
+            - weight: 20
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values:
+                      - nst-n7
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values:
+                      - nst-n1
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - until nc -z -w 2 opensourcehq-postgres 5432; do echo "Waiting for database at opensourcehq-postgres:5432..."; sleep 2; done; echo "Database is online and accepting connections."
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
