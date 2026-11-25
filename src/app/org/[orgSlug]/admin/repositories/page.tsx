@@ -33,7 +33,7 @@ export default async function AdminRepositoriesPage({ params }: { params: { orgS
     syncStatus: r.syncStatus,
     cohortRepositories: r.cohortRepositories.map((cr) => ({
       id: cr.id,
-      cohort: { name: cr.cohort.name },
+      cohort: { id: cr.cohort.id, name: cr.cohort.name },
     })),
     _count: r._count,
   }));

@@ -33,6 +33,10 @@ export default async function AdminCohortsPage({ params }: { params: { orgSlug: 
           },
         },
       },
+      repositories: {
+        select: { id: true, name: true, fullName: true, syncStatus: true },
+        orderBy: { fullName: "asc" },
+      },
     },
   });
 
@@ -59,7 +63,8 @@ export default async function AdminCohortsPage({ params }: { params: { orgSlug: 
     })),
     cohortRepositories: c.cohortRepositories.map((cr) => ({
       id: cr.id,
-      repository: { fullName: cr.repository.fullName },
+      repositoryId: cr.repositoryId,
+      repository: { id: cr.repository.id, fullName: cr.repository.fullName },
     })),
     _count: c._count,
   }));
@@ -74,11 +79,14 @@ export default async function AdminCohortsPage({ params }: { params: { orgSlug: 
     .filter((m) => m.role === "MENTEE")
     .map((m) => m.user);
 
+  const availableRepositories = org.repositories;
+
   return (
     <AdminCohortsClient
       cohorts={cohorts}
       availableMentors={availableMentors}
       availableMentees={availableMentees}
+      availableRepositories={availableRepositories}
       orgId={org.id}
       orgSlug={params.orgSlug}
     />

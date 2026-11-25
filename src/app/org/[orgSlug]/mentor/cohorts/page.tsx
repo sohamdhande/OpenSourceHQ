@@ -67,11 +67,17 @@ export default async function MentorCohortsPage({ params }: { params: { orgSlug:
                   Tracked Repositories
                 </span>
                 <div className="flex flex-wrap gap-1.5">
-                  {cohort.cohortRepositories.map((cr) => (
-                    <Badge key={cr.id} variant="secondary">
-                      {cr.repository.fullName}
-                    </Badge>
-                  ))}
+                  {cohort.cohortRepositories.length === 0 ? (
+                    <span className="text-[11px] text-muted-foreground italic">
+                      No repositories explicitly scoped.
+                    </span>
+                  ) : (
+                    cohort.cohortRepositories.map((cr) => (
+                      <Badge key={cr.id} variant="secondary">
+                        {cr.repository.fullName}
+                      </Badge>
+                    ))
+                  )}
                 </div>
               </div>
             </CardContent>

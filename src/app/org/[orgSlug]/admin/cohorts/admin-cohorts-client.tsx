@@ -42,14 +42,22 @@ interface CohortItem {
   timezone: string;
   mentors: Array<{ id: string; mentorId: string; mentor: UserSummary }>;
   enrollments: Array<{ id: string; menteeId: string; mentee: UserSummary }>;
-  cohortRepositories: Array<{ id: string; repository: { fullName: string } }>;
+  cohortRepositories: Array<{ id: string; repositoryId?: string; repository: { id?: string; fullName: string } }>;
   _count: { dailyReports: number; tasks: number };
+}
+
+interface RepositorySummary {
+  id: string;
+  name: string;
+  fullName: string;
+  syncStatus?: string;
 }
 
 interface AdminCohortsClientProps {
   cohorts: CohortItem[];
   availableMentors: UserSummary[];
   availableMentees: UserSummary[];
+  availableRepositories?: RepositorySummary[];
   orgId: string;
   orgSlug: string;
 }
@@ -58,6 +66,7 @@ export function AdminCohortsClient({
   cohorts: initialCohorts,
   availableMentors,
   availableMentees,
+  availableRepositories = [],
   orgId,
   orgSlug,
 }: AdminCohortsClientProps) {
@@ -76,6 +85,7 @@ export function AdminCohortsClient({
   const [createTimezone, setCreateTimezone] = useState("UTC");
   const [createMentorIds, setCreateMentorIds] = useState<string[]>([]);
   const [createMenteeIds, setCreateMenteeIds] = useState<string[]>([]);
+  const [createRepositoryIds, setCreateRepositoryIds] = useState<string[]>([]);
   const [createSubmitting, setCreateSubmitting] = useState(false);
 
   // Edit form states
@@ -87,12 +97,14 @@ export function AdminCohortsClient({
   const [editTimezone, setEditTimezone] = useState("UTC");
   const [editMentorIds, setEditMentorIds] = useState<string[]>([]);
   const [editMenteeIds, setEditMenteeIds] = useState<string[]>([]);
+  const [editRepositoryIds, setEditRepositoryIds] = useState<string[]>([]);
   const [editSubmitting, setEditSubmitting] = useState(false);
-  const [editTab, setEditTab] = useState<"general" | "mentors" | "mentees">("general");
+  const [editTab, setEditTab] = useState<"general" | "mentors" | "mentees" | "repositories">("general");
 
   // Search filter states inside modals
   const [mentorSearch, setMentorSearch] = useState("");
   const [menteeSearch, setMenteeSearch] = useState("");
+  const [repoSearch, setRepoSearch] = useState("");
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
@@ -108,9 +120,13 @@ export function AdminCohortsClient({
     setEditTimezone(cohort.timezone || "UTC");
     setEditMentorIds(cohort.mentors.map((m) => m.mentorId));
     setEditMenteeIds(cohort.enrollments.map((e) => e.menteeId));
+    setEditRepositoryIds(
+      cohort.cohortRepositories.map((cr) => cr.repositoryId || cr.repository.id || "")
+    );
     setEditTab("general");
     setMentorSearch("");
     setMenteeSearch("");
+    setRepoSearch("");
     setErrorMsg(null);
   };
 
@@ -128,6 +144,13 @@ export function AdminCohortsClient({
     );
   };
 
+  // Toggle Repository in Edit Form
+  const toggleEditRepository = (repoId: string) => {
+    setEditRepositoryIds((prev) =>
+      prev.includes(repoId) ? prev.filter((id) => id !== repoId) : [...prev, repoId]
+    );
+  };
+
   // Toggle Mentor in Create Form
   const toggleCreateMentor = (mentorId: string) => {
     setCreateMentorIds((prev) =>
@@ -139,6 +162,13 @@ export function AdminCohortsClient({
   const toggleCreateMentee = (menteeId: string) => {
     setCreateMenteeIds((prev) =>
       prev.includes(menteeId) ? prev.filter((id) => id !== menteeId) : [...prev, menteeId]
+    );
+  };
+
+  // Toggle Repository in Create Form
+  const toggleCreateRepository = (repoId: string) => {
+    setCreateRepositoryIds((prev) =>
+      prev.includes(repoId) ? prev.filter((id) => id !== repoId) : [...prev, repoId]
     );
   };
 
@@ -159,6 +189,7 @@ export function AdminCohortsClient({
         timezone: editTimezone.trim() || "UTC",
         mentorIds: editMentorIds,
         menteeIds: editMenteeIds,
+        repositoryIds: editRepositoryIds,
       };
 
       const res = await fetch(`/api/orgs/${orgId}/cohorts/${editingCohort.id}`, {
@@ -195,6 +226,14 @@ export function AdminCohortsClient({
                   menteeId: e.mentee.id,
                   mentee: e.mentee,
                 })),
+                cohortRepositories: (updated.cohortRepositories || []).map((cr: any) => ({
+                  id: cr.id,
+                  repositoryId: cr.repositoryId || cr.repository?.id,
+                  repository: {
+                    id: cr.repository?.id,
+                    fullName: cr.repository?.fullName || "Repository",
+                  },
+                })),
               }
             : c
         )
@@ -229,6 +268,7 @@ export function AdminCohortsClient({
           timezone: createTimezone,
           mentorIds: createMentorIds,
           menteeIds: createMenteeIds,
+          repositoryIds: createRepositoryIds,
         }),
       });
 
@@ -566,6 +606,19 @@ export function AdminCohortsClient({
                 <GraduationCap className="w-3.5 h-3.5 text-cyan-500" />
                 <span>Mentees ({editMenteeIds.length})</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setEditTab("repositories")}
+                className={`pb-2.5 px-3 font-semibold border-b-2 transition-colors flex items-center gap-1.5 ${
+                  editTab === "repositories"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <FolderGit2 className="w-3.5 h-3.5 text-blue-400" />
+                <span>Repositories ({editRepositoryIds.length})</span>
+              </button>
             </div>
 
             {errorMsg && (
@@ -813,6 +866,97 @@ export function AdminCohortsClient({
                     </p>
                   </div>
                 )}
+
+                {/* TAB 4: Tracked Repositories */}
+                {editTab === "repositories" && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="relative flex-1">
+                        <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-muted-foreground" />
+                        <input
+                          type="text"
+                          placeholder="Search repositories..."
+                          value={repoSearch}
+                          onChange={(e) => setRepoSearch(e.target.value)}
+                          className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1 text-[11px]">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            setEditRepositoryIds(availableRepositories.map((r) => r.id))
+                          }
+                          className="text-[11px] h-7 px-2"
+                        >
+                          Select All
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditRepositoryIds([])}
+                          className="text-[11px] h-7 px-2 text-muted-foreground"
+                        >
+                          Clear
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 max-h-72 overflow-y-auto p-1">
+                      {availableRepositories.length === 0 ? (
+                        <div className="p-6 text-center text-muted-foreground text-xs bg-muted/20 rounded-lg border border-dashed border-border/80">
+                          No repositories tracked yet in this organization. You can track repositories in Repository Management.
+                        </div>
+                      ) : (
+                        availableRepositories
+                          .filter((r) =>
+                            r.fullName.toLowerCase().includes(repoSearch.toLowerCase())
+                          )
+                          .map((repo) => {
+                            const isTracked = editRepositoryIds.includes(repo.id);
+                            return (
+                              <div
+                                key={repo.id}
+                                onClick={() => toggleEditRepository(repo.id)}
+                                className={`flex items-center justify-between p-2.5 rounded-lg border transition-all cursor-pointer ${
+                                  isTracked
+                                    ? "bg-primary/5 border-primary/40 shadow-xs"
+                                    : "bg-card border-border/60 hover:bg-muted/40"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  <input
+                                    type="checkbox"
+                                    checked={isTracked}
+                                    onChange={() => {}}
+                                    className="rounded border-input text-primary focus:ring-primary w-4 h-4"
+                                  />
+                                  <div>
+                                    <span className="font-mono font-semibold text-xs text-foreground block">
+                                      {repo.fullName}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <Badge
+                                  variant={isTracked ? "default" : "secondary"}
+                                  className="text-[10px]"
+                                >
+                                  {isTracked ? "Tracked in Cohort" : "Unassigned"}
+                                </Badge>
+                              </div>
+                            );
+                          })
+                      )}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Repositories selected here are scoped directly to this cohort. Fellows in this cohort will have their commits, PRs, and issues tracked for these repositories.
+                    </p>
+                  </div>
+                )}
               </CardContent>
 
               {/* Modal Footer */}
@@ -822,6 +966,8 @@ export function AdminCohortsClient({
                   <span>{editMentorIds.length} Mentor(s)</span>
                   <span>&bull;</span>
                   <span>{editMenteeIds.length} Mentee(s)</span>
+                  <span>&bull;</span>
+                  <span>{editRepositoryIds.length} Repo(s)</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
@@ -971,6 +1117,36 @@ export function AdminCohortsClient({
                         </div>
                       );
                     })}
+                  </div>
+                </div>
+
+                {/* Initial Repository Assignment */}
+                <div>
+                  <span className="font-semibold text-foreground block mb-1">
+                    Track Repositories ({createRepositoryIds.length} selected)
+                  </span>
+                  <div className="border border-border/60 rounded-lg p-2 max-h-32 overflow-y-auto space-y-1">
+                    {availableRepositories.length === 0 ? (
+                      <span className="text-[11px] text-muted-foreground italic p-1 block">
+                        No repositories available yet.
+                      </span>
+                    ) : (
+                      availableRepositories.map((r) => {
+                        const isSel = createRepositoryIds.includes(r.id);
+                        return (
+                          <div
+                            key={r.id}
+                            onClick={() => toggleCreateRepository(r.id)}
+                            className={`p-1.5 rounded flex items-center justify-between cursor-pointer text-xs font-mono ${
+                              isSel ? "bg-blue-500/10 font-semibold text-blue-400" : "hover:bg-muted/40"
+                            }`}
+                          >
+                            <span>{r.fullName}</span>
+                            {isSel && <Check className="w-3.5 h-3.5 text-blue-400" />}
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
               </CardContent>

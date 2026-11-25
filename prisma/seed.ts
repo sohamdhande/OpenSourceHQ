@@ -225,17 +225,17 @@ async function main() {
     });
   }
 
-  // 4. Create Tracked Repositories
+  // 4. Create Tracked Repositories (real open-source repositories)
   const repo1 = await prisma.repository.create({
     data: {
       organizationId: org.id,
       provider: "GITHUB",
-      providerRepositoryId: "repo_101",
-      ownerLogin: "nstsdc",
-      name: "hyper-kernel",
-      fullName: "nstsdc/hyper-kernel",
-      url: "https://github.com/nstsdc/hyper-kernel",
-      description: "Linux kernel telemetry and eBPF tracing engine",
+      providerRepositoryId: "repo_openmrs_core",
+      ownerLogin: "openmrs",
+      name: "openmrs-core",
+      fullName: "openmrs/openmrs-core",
+      url: "https://github.com/openmrs/openmrs-core",
+      description: "OpenMRS core medical record system API and business service layer",
       syncStatus: "ACTIVE",
       lastSyncedAt: new Date(),
     },
@@ -245,12 +245,12 @@ async function main() {
     data: {
       organizationId: org.id,
       provider: "GITHUB",
-      providerRepositoryId: "repo_102",
-      ownerLogin: "nstsdc",
-      name: "dev-toolchain",
-      fullName: "nstsdc/dev-toolchain",
-      url: "https://github.com/nstsdc/dev-toolchain",
-      description: "Fast compiler runner and static analyzer CLI",
+      providerRepositoryId: "repo_facebook_react",
+      ownerLogin: "facebook",
+      name: "react",
+      fullName: "facebook/react",
+      url: "https://github.com/facebook/react",
+      description: "The library for web and native user interfaces",
       syncStatus: "ACTIVE",
       lastSyncedAt: new Date(),
     },
@@ -260,12 +260,12 @@ async function main() {
     data: {
       organizationId: org.id,
       provider: "GITHUB",
-      providerRepositoryId: "repo_103",
-      ownerLogin: "nstsdc",
-      name: "distributed-cache",
-      fullName: "nstsdc/distributed-cache",
-      url: "https://github.com/nstsdc/distributed-cache",
-      description: "In-memory distributed ring cache with Raft consensus",
+      providerRepositoryId: "repo_vercel_nextjs",
+      ownerLogin: "vercel",
+      name: "next.js",
+      fullName: "vercel/next.js",
+      url: "https://github.com/vercel/next.js",
+      description: "The React Framework for the Web",
       syncStatus: "ACTIVE",
       lastSyncedAt: new Date(),
     },
@@ -432,13 +432,13 @@ async function main() {
     data: {
       organizationId: org.id,
       cohortId: cohort1.id,
-      title: "Add Static Analysis Linter Rule for Unchecked Mutex",
-      description: "Extend dev-toolchain AST visitor to warn whenever a pthread mutex is acquired without error checking or RAII guard.",
+      title: "Add Static Analysis Rule for OpenMRS Validation",
+      description: "Extend openmrs-core visit handler to validate encounters during REST submission.",
       priority: TaskPriority.NORMAL,
       category: "Developer Tooling",
       createdById: mentor2.id,
       repositoryId: repo2.id,
-      externalIssueUrl: "https://github.com/nstsdc/dev-toolchain/issues/5",
+      externalIssueUrl: "https://github.com/openmrs/openmrs-core/issues/5",
       dueAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 10),
     },
   });
@@ -501,7 +501,7 @@ async function main() {
         create: {
           submittedById: mentees[2].id,
           notes: "Implemented AST check for pthread_mutex_lock. Handled both POSIX and C++11 std::unique_lock cases.",
-          evidenceUrl: "https://github.com/nstsdc/dev-toolchain/pull/18",
+          evidenceUrl: "https://github.com/openmrs/openmrs-core/pull/18",
         },
       },
     },
