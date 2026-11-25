@@ -3,9 +3,8 @@ kind: Ingress
 metadata:
   name: opensourcehq-ingress
   namespace: nst-events
-  annotations:
-    traefik.ingress.kubernetes.io/router.entrypoints: web
 spec:
+  ingressClassName: traefik
   rules:
     - host: org.nstsdc.org
       http:
@@ -17,4 +16,3 @@ spec:
                 name: opensourcehq-app
                 port:
                   number: 80
-
