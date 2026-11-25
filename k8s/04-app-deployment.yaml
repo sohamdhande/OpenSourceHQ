@@ -30,7 +30,7 @@ spec:
         runAsGroup: 1001
       containers:
         - name: opensourcehq
-          image: ghcr.io/sohamdhande/opensourcehq:2b22586
+          image: ghcr.io/sohamdhande/opensourcehq:a964d3b
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
