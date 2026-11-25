@@ -4,6 +4,7 @@ import { OrgRole } from "@prisma/client";
 import { logAudit } from "@/lib/audit";
 import { SessionUser } from "@/server/auth/session";
 import { canManageOrganization } from "@/server/authorization/policies";
+import { dispatchInvitationEmail } from "@/lib/email/invitation-mailer";
 
 export async function inviteOrganizationMember(
   user: SessionUser,
@@ -48,6 +49,14 @@ export async function inviteOrganizationMember(
     targetId: invitation.id,
     metadata: { email, role, cohortId },
   });
+
+  dispatchInvitationEmail({
+    organizationId,
+    email: normalizedEmail,
+    role,
+    token,
+    inviterName: user.name || user.email,
+  }).catch((err) => console.error("Async invitation email dispatch error:", err));
 
   return invitation;
 }

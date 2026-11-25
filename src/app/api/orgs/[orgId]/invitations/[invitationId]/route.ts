@@ -3,6 +3,7 @@ import { getSession } from "@/server/auth/session";
 import prisma from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { canManageOrganization } from "@/server/authorization/policies";
+import { dispatchInvitationEmail } from "@/lib/email/invitation-mailer";
 
 export async function DELETE(_req: NextRequest, { params }: { params: { orgId: string; invitationId: string } }) {
   const session = await getSession();
@@ -23,5 +24,14 @@ export async function POST(_req: NextRequest, { params }: { params: { orgId: str
   if (!existing) return NextResponse.json({ error: { code: "NOT_FOUND", message: "Pending invitation not found" } }, { status: 404 });
   const invitation = await prisma.invitation.update({ where: { id: existing.id }, data: { expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) } });
   await logAudit({ organizationId: params.orgId, actorId: session.id, action: "INVITATION_RESENT", targetType: "Invitation", targetId: invitation.id, metadata: { email: invitation.email } });
+  
+  dispatchInvitationEmail({
+    organizationId: params.orgId,
+    email: invitation.email,
+    role: invitation.role,
+    token: invitation.token,
+    inviterName: session.name || session.email,
+  }).catch((err) => console.error("Async resend invitation email dispatch error:", err));
+
   return NextResponse.json({ success: true, invitation });
 }

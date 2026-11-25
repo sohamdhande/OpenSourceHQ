@@ -22,6 +22,7 @@ import {
   HeartHandshake,
   AlertCircle,
   Terminal,
+  Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SessionUser } from "@/server/auth/session";
@@ -81,6 +82,7 @@ export function Sidebar({ user, orgSlug }: SidebarProps) {
         title: "GOVERNANCE",
         links: [
           { href: `/org/${orgSlug}/admin/integrations/github`, label: "GitHub App", icon: Github },
+          { href: `/org/${orgSlug}/admin/integrations/gmail`, label: "Gmail Integration", icon: Mail },
           { href: `/org/${orgSlug}/admin/audit`, label: "Audit Logs", icon: ShieldAlert },
           { href: `/org/${orgSlug}/admin/settings`, label: "Settings", icon: Settings },
         ],

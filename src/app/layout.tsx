@@ -25,12 +25,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
-      <head>
-        <link rel="icon" href="/favicon.ico" sizes="any" />
-        <link rel="icon" type="image/svg+xml" href="/icon.svg" />
-        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
-        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+      <body className="bg-background text-foreground antialiased min-h-screen">
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -47,8 +42,6 @@ export default function RootLayout({
             `,
           }}
         />
-      </head>
-      <body className="bg-background text-foreground antialiased min-h-screen">
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
