@@ -218,9 +218,15 @@ export default async function MentorDashboardPage({ params }: { params: { orgSlu
       : Promise.resolve([]),
   ]);
   const trackedRepositoryIds = [...new Set([...memberRepositoryRows, ...cohortRepositoryRows].map((row) => row.repositoryId))];
-  const recentActivitiesRaw = trackedRepositoryIds.length
-    ? await prisma.gitHubActivity.findMany({
-        where: { organizationId: org.id, repositoryId: { in: trackedRepositoryIds }, isFixture: false },
+  const recentActivitiesRaw =
+    trackedRepositoryIds.length && scopedMenteeIds.length
+      ? await prisma.gitHubActivity.findMany({
+          where: {
+            organizationId: org.id,
+            repositoryId: { in: trackedRepositoryIds },
+            isFixture: false,
+            githubAccount: { userId: { in: scopedMenteeIds } },
+          },
         include: {
           repository: { select: { fullName: true, url: true } },
           githubAccount: {

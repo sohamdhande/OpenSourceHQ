@@ -17,9 +17,19 @@ export default async function AdminDashboardPage({ params }: { params: { orgSlug
 
   const { metrics, cohortComparison } = await getOrganizationAnalytics(org.id);
 
-  // Recent GitHub Activity
+  // Recent GitHub Activity (scoped to active mentees in this organization)
   const recentActivitiesRaw = await prisma.gitHubActivity.findMany({
-    where: { organizationId: org.id, isFixture: false },
+    where: {
+      organizationId: org.id,
+      isFixture: false,
+      githubAccount: {
+        user: {
+          memberships: {
+            some: { organizationId: org.id, role: "MENTEE", status: "ACTIVE" },
+          },
+        },
+      },
+    },
     include: {
       repository: { select: { fullName: true } },
       githubAccount: {
