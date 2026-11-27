@@ -43,8 +43,9 @@ export async function POST(_req: NextRequest, { params }: { params: { repository
   }
   try {
     const result = await syncSelectedGitHubRepository(repository.id, repository.organizationId);
+    const activityCount = await prisma.gitHubActivity.count({ where: { repositoryId: repository.id } });
     await logAudit({ organizationId: repository.organizationId, actorId: session.id, action: "GITHUB_REPOSITORY_SYNCED", targetType: "Repository", targetId: repository.id, metadata: { activitiesProcessed: result.activitiesProcessed } });
-    return NextResponse.json({ success: true, result });
+    return NextResponse.json({ success: true, result, activityCount });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Repository sync failed";
     return NextResponse.json({ error: { code: "GITHUB_SYNC_FAILED", message } }, { status: message.includes("rate limit") ? 429 : 422 });

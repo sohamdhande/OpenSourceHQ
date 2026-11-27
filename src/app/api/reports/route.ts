@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/server/auth/session";
-import { submitDailyReport } from "@/features/reports/reports-service";
-import { DailyReportCreateSchema } from "@/lib/schemas";
+import { submitDailyReport, submitSelfTrackedReport } from "@/features/reports/reports-service";
+import { DailyReportCreateSchema, SelfTrackedReportCreateSchema } from "@/lib/schemas";
+import { canUseSelfTracking } from "@/server/authorization/policies";
 import prisma from "@/lib/db";
 
 export async function GET(req: NextRequest) {
@@ -16,9 +17,42 @@ export async function GET(req: NextRequest) {
   const menteeId = searchParams.get("menteeId");
   const status = searchParams.get("status");
   const reportDate = searchParams.get("reportDate");
+  const mode = searchParams.get("mode");
 
   if (!organizationId) {
     return NextResponse.json({ error: { code: "BAD_REQUEST", message: "organizationId required" } }, { status: 400 });
+  }
+
+  if (mode === "self") {
+    const canSelfTrack = await canUseSelfTracking(session, organizationId);
+    if (!canSelfTrack) {
+      return NextResponse.json({ error: { code: "FORBIDDEN", message: "Self-tracking is not enabled for this organization." } }, { status: 403 });
+    }
+    const selfWhere: Record<string, unknown> = {
+      organizationId,
+      menteeId: session.id,
+      cohortId: null,
+      isSelfTracked: true,
+    };
+    if (status) selfWhere.status = status;
+    if (reportDate) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(reportDate)) {
+        return NextResponse.json({ error: { code: "INVALID_REPORT_DATE", message: "Report date must use YYYY-MM-DD format." } }, { status: 400 });
+      }
+      const exactDate = new Date(`${reportDate}T00:00:00.000Z`);
+      if (Number.isNaN(exactDate.getTime()) || exactDate.toISOString().slice(0, 10) !== reportDate) {
+        return NextResponse.json({ error: { code: "INVALID_REPORT_DATE", message: "Enter a valid calendar date." } }, { status: 400 });
+      }
+      selfWhere.reportDate = exactDate;
+    }
+
+    const reports = await prisma.dailyReport.findMany({
+      where: selfWhere,
+      include: { links: true },
+      orderBy: [{ reportDate: "desc" }, { createdAt: "desc" }],
+      ...(reportDate ? {} : { take: 100 }),
+    });
+    return NextResponse.json({ reports });
   }
 
   // Multi-tenant check
@@ -31,7 +65,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Mentee role can only list own reports + cohort-shared reports in their enrolled cohort
-  let whereClause: any = { organizationId };
+  let whereClause: any = { organizationId, isSelfTracked: false };
 
   if (cohortId) whereClause.cohortId = cohortId;
   if (status) whereClause.status = status;
@@ -133,6 +167,22 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const organizationId = typeof body.organizationId === "string" ? body.organizationId : session.activeOrgId;
     if (!organizationId) return NextResponse.json({ error: { code: "BAD_REQUEST", message: "organizationId required" } }, { status: 400 });
+
+    if (body.mode === "self") {
+      if (!(await canUseSelfTracking(session, organizationId))) {
+        return NextResponse.json({ error: { code: "FORBIDDEN", message: "Self-tracking is not enabled for this organization." } }, { status: 403 });
+      }
+      const parsedSelf = SelfTrackedReportCreateSchema.safeParse({ ...body, organizationId });
+      if (!parsedSelf.success) {
+        const formattedMessage = parsedSelf.error.errors
+          .map((e) => e.message || `${e.path.join(".")}: invalid`)
+          .join(". ");
+        return NextResponse.json({ error: { code: "VALIDATION_ERROR", message: formattedMessage } }, { status: 400 });
+      }
+      const report = await submitSelfTrackedReport(session, parsedSelf.data);
+      return NextResponse.json({ success: true, report });
+    }
+
     const membership = session.isPlatformSuperAdmin ? null : await prisma.organizationMembership.findUnique({ where: { organizationId_userId: { organizationId, userId: session.id } } });
     if (!session.isPlatformSuperAdmin && (membership?.status !== "ACTIVE" || membership.role !== "MENTEE")) {
       return NextResponse.json({ error: { code: "FORBIDDEN", message: "Only active mentees can submit their own reports" } }, { status: 403 });

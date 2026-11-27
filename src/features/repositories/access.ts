@@ -34,7 +34,13 @@ export async function canManageMemberRepositories(
     prisma.organizationMembership.findUnique({ where: { organizationId_userId: { organizationId, userId: targetUserId } } }),
   ]);
   if (actorMembership?.status !== "ACTIVE" || targetMembership?.status !== "ACTIVE") return false;
-  if (actor.id === targetUserId) return actorMembership.role === "MENTEE" || actorMembership.role === "MENTOR";
+  if (actor.id === targetUserId) {
+    return (
+      actorMembership.role === "MENTEE" ||
+      actorMembership.role === "MENTOR" ||
+      (actorMembership.role === "ORG_ADMIN" && actorMembership.selfTrackingEnabled)
+    );
+  }
   if (actorMembership.role === "ORG_ADMIN") return targetMembership.role === "MENTEE";
   if (actorMembership.role === "MENTOR" && targetMembership.role === "MENTEE") {
     return canMentorAccessMentee(actor.id, targetUserId, organizationId);

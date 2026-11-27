@@ -46,12 +46,39 @@ export function Sidebar({ user, orgSlug }: SidebarProps) {
   const pathname = usePathname();
   const role = user.activeOrgRole;
   const isAdmin = role === "ORG_ADMIN" || Boolean(user.isPlatformSuperAdmin);
-  const isMentorView = isAdmin ? pathname.startsWith(`/org/${orgSlug}/mentor`) : role === "MENTOR";
+  const isSelfView = (role === "ORG_ADMIN" || role === "MENTOR") && pathname.startsWith(`/org/${orgSlug}/self`);
+  const isMentorView = !isSelfView && (isAdmin ? pathname.startsWith(`/org/${orgSlug}/mentor`) : role === "MENTOR");
   const isMentee = role === "MENTEE" || (!role && !user.isPlatformSuperAdmin) || pathname.includes("/student");
 
   let sections: NavSection[] = [];
 
-  if (isMentorView) {
+  if (isSelfView) {
+    sections = [
+      {
+        title: "COMMAND CENTER",
+        links: [
+          { href: `/org/${orgSlug}/self`, label: "Overview", icon: LayoutDashboard },
+          { href: `/org/${orgSlug}/self/daily-log`, label: "Submit Daily Log", icon: FileText },
+          { href: `/org/${orgSlug}/self/reports`, label: "Log History", icon: Layers },
+        ],
+      },
+      {
+        title: "CODE & EXECUTION",
+        links: [
+          { href: `/org/${orgSlug}/self/tasks`, label: "Personal Tasks", icon: CheckSquare },
+          { href: `/org/${orgSlug}/self/blockers`, label: "Personal Blockers", icon: AlertCircle },
+          { href: `/org/${orgSlug}/self/github`, label: "GitHub Telemetry", icon: Github },
+          { href: `/org/${orgSlug}/self/repositories`, label: "My Repositories", icon: FolderGit2 },
+        ],
+      },
+      {
+        title: "ACCOUNT",
+        links: [
+          { href: `/org/${orgSlug}/self/profile`, label: "Profile & Settings", icon: Settings },
+        ],
+      },
+    ];
+  } else if (isMentorView) {
     sections = [
       {
         title: "OVERVIEW",
@@ -175,7 +202,15 @@ export function Sidebar({ user, orgSlug }: SidebarProps) {
   };
 
   return (
-    <aside aria-label="Primary navigation" className="app-sidebar fixed inset-y-0 left-0 z-40 flex h-screen w-16 shrink-0 select-none flex-col border-r border-border bg-card md:w-64">
+    <aside
+      aria-label="Primary navigation"
+      className={cn(
+        "app-sidebar fixed inset-y-0 left-0 z-40 flex h-screen w-16 shrink-0 select-none flex-col border-r md:w-64",
+        isSelfView
+          ? "border-white/15 bg-white/[0.06] backdrop-blur-3xl backdrop-saturate-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.22),inset_-1px_0_0_rgba(255,255,255,0.12),0_20px_50px_rgba(0,0,0,0.7)]"
+          : "border-border bg-card"
+      )}
+    >
       {/* Brand Header */}
       <div className="flex h-14 items-center gap-3 border-b border-border px-3 md:px-4">
         <div className="relative w-8 h-8 rounded-md bg-secondary border border-border flex items-center justify-center text-foreground font-bold text-xs shadow-xs shrink-0">
@@ -206,6 +241,7 @@ export function Sidebar({ user, orgSlug }: SidebarProps) {
                   `/org/${orgSlug}/admin`,
                   `/org/${orgSlug}/mentor`,
                   `/org/${orgSlug}/student`,
+                  `/org/${orgSlug}/self`,
                 ];
                 const isBaseRoute = baseRoutes.includes(link.href);
                 const isActive = pathname === link.href || (!isBaseRoute && pathname.startsWith(link.href));
@@ -276,14 +312,18 @@ export function Sidebar({ user, orgSlug }: SidebarProps) {
                   roleColors[role as keyof typeof roleColors] || "bg-muted text-muted-foreground border-border"
                 )}
               >
-                {isAdmin && isMentorView ? "Admin · Mentor" : roleLabels[role as keyof typeof roleLabels] || "GUEST"}
+                {isSelfView
+                  ? `${role === "ORG_ADMIN" ? "Admin" : "Mentor"} · Self-Track`
+                  : isAdmin && isMentorView
+                    ? "Admin · Mentor"
+                    : roleLabels[role as keyof typeof roleLabels] || "GUEST"}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Mentee branding: Made by nst sdc with GitHub logo */}
-        {isMentee && (
+        {/* Mentee & Self-Track branding: Made by nst sdc with GitHub logo */}
+        {(isMentee || isSelfView) && (
           <a
             href="https://github.com/nst-sdc"
             target="_blank"

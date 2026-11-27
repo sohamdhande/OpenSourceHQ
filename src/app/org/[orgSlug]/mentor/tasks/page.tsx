@@ -37,7 +37,7 @@ export default async function MentorTasksPage({ params }: { params: { orgSlug: s
 
   // All tasks in org
   const tasksRaw = await prisma.task.findMany({
-    where: { organizationId: org.id },
+    where: { organizationId: org.id, isSelfTracked: false },
     include: {
       creator: { select: { id: true, name: true } },
       cohort: { select: { id: true, name: true } },

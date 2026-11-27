@@ -30,6 +30,31 @@ export async function getUserOrgMembership(userId: string, organizationId: strin
   });
 }
 
+export async function canAccessSelfTrackingSetup(
+  user: SessionUser | null,
+  organizationId: string
+): Promise<boolean> {
+  if (!user) return false;
+  const membership = await getUserOrgMembership(user.id, organizationId);
+  return (
+    membership?.status === "ACTIVE" &&
+    (membership.role === OrgRole.ORG_ADMIN || membership.role === OrgRole.MENTOR)
+  );
+}
+
+export async function canUseSelfTracking(
+  user: SessionUser | null,
+  organizationId: string
+): Promise<boolean> {
+  if (!user) return false;
+  const membership = await getUserOrgMembership(user.id, organizationId);
+  return (
+    membership?.status === "ACTIVE" &&
+    (membership.role === OrgRole.ORG_ADMIN || membership.role === OrgRole.MENTOR) &&
+    membership.selfTrackingEnabled === true
+  );
+}
+
 export async function canManageOrganization(user: SessionUser | null, organizationId: string): Promise<boolean> {
   if (!user) return false;
   if (await isPlatformSuperAdmin(user)) return true;
@@ -106,6 +131,10 @@ export async function canViewReport(user: SessionUser | null, reportId: string):
     },
   });
   if (!report) return false;
+  if (report.isSelfTracked) {
+    return report.menteeId === user.id && (await canUseSelfTracking(user, report.organizationId));
+  }
+  if (!report.cohort) return false;
 
   if (await isPlatformSuperAdmin(user)) return true;
   // Draft reports are private to their author until they submit them.
@@ -149,6 +178,7 @@ export async function canReviewReport(user: SessionUser | null, reportId: string
     },
   });
   if (!report) return false;
+  if (report.isSelfTracked || !report.cohort) return false; // Personal logs never enter mentor review
   if (report.menteeId === user.id) return false; // Mentee cannot review own report
 
   if (await isPlatformSuperAdmin(user)) return true;
@@ -184,6 +214,9 @@ export async function canManageTask(user: SessionUser | null, taskId: string, as
     },
   });
   if (!task) return false;
+  if (task.isSelfTracked) {
+    return task.createdById === user.id && (!assigneeId || assigneeId === user.id) && (await canUseSelfTracking(user, task.organizationId));
+  }
   if (await isPlatformSuperAdmin(user)) return true;
 
   const membership = await getUserOrgMembership(user.id, task.organizationId);

@@ -18,6 +18,7 @@ export interface SessionUser {
   activeOrgRole?: OrgRole;
   activeOrgSlug?: string;
   activeOrgName?: string;
+  selfTrackingEnabled?: boolean;
 }
 
 export interface SessionPayload {

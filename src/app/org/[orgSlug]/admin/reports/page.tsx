@@ -23,7 +23,7 @@ export default async function AdminReportsPage({
   }
 
   const reports = await prisma.dailyReport.findMany({
-    where: { organizationId: org.id },
+    where: { organizationId: org.id, isSelfTracked: false },
     include: {
       mentee: { select: { id: true, name: true, email: true, imageUrl: true } },
       cohort: { select: { id: true, name: true, slug: true } },

@@ -4,7 +4,12 @@ import { resolveBlocker, reopenBlocker } from "@/features/blockers/blockers-serv
 import { BlockerResolveSchema } from "@/lib/schemas";
 import prisma from "@/lib/db";
 
-async function canViewBlocker(user: NonNullable<Awaited<ReturnType<typeof getSession>>>, blocker: { organizationId: string; menteeId: string; cohortId: string | null; mentorId: string | null }) {
+import { canUseSelfTracking } from "@/server/authorization/policies";
+
+async function canViewBlocker(user: NonNullable<Awaited<ReturnType<typeof getSession>>>, blocker: { organizationId: string; menteeId: string; cohortId: string | null; mentorId: string | null; isSelfTracked?: boolean }) {
+  if (blocker.isSelfTracked) {
+    return blocker.menteeId === user.id && (await canUseSelfTracking(user, blocker.organizationId));
+  }
   if (user.isPlatformSuperAdmin) return true;
   const membership = await prisma.organizationMembership.findUnique({ where: { organizationId_userId: { organizationId: blocker.organizationId, userId: user.id } } });
   if (membership?.status !== "ACTIVE") return false;

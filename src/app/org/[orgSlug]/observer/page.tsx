@@ -20,7 +20,7 @@ export default async function ObserverOverviewPage({ params }: { params: { orgSl
     prisma.cohort.count({ where: { organizationId: organization.id, status: "ACTIVE" } }),
     prisma.organizationMembership.count({ where: { organizationId: organization.id, role: "MENTEE", status: "ACTIVE" } }),
     prisma.organizationMembership.count({ where: { organizationId: organization.id, role: "MENTOR", status: "ACTIVE" } }),
-    prisma.dailyReport.count({ where: { organizationId: organization.id, visibility: "COHORT", status: { not: "DRAFT" } } }),
+    prisma.dailyReport.count({ where: { organizationId: organization.id, isSelfTracked: false, visibility: "COHORT", status: { not: "DRAFT" } } }),
     prisma.event.findMany({ where: { organizationId: organization.id, startsAt: { gte: now }, cohortId: null }, orderBy: { startsAt: "asc" }, take: 5, select: { id: true, title: true, startsAt: true, endsAt: true, timezone: true, location: true, meetingUrl: true } }),
     prisma.announcement.findMany({ where: { organizationId: organization.id, cohortId: null, archivedAt: null }, orderBy: [{ isPinned: "desc" }, { publishedAt: "desc" }], take: 5, select: { id: true, title: true, body: true, publishedAt: true, isPinned: true, author: { select: { name: true } } } }),
   ]);

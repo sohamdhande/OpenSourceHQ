@@ -24,12 +24,14 @@ export function getGoogleOAuthClientConfig() {
 }
 
 function getSecretKey(): string {
-  return (
+  const secret =
     process.env.APP_SECRET ||
     process.env.AUTH_SECRET ||
-    process.env.APP_ENCRYPTION_KEY ||
-    "development-oauth-state-signing-key-minimum-32-chars"
-  );
+    process.env.APP_ENCRYPTION_KEY;
+  if (process.env.NODE_ENV === "production" && (!secret || secret.length < 32)) {
+    throw new Error("APP_SECRET, AUTH_SECRET, or APP_ENCRYPTION_KEY (32+ chars) must be configured in production.");
+  }
+  return secret || "development-oauth-state-signing-key-minimum-32-chars";
 }
 
 export interface GoogleOAuthState {

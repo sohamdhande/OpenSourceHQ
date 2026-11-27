@@ -282,15 +282,17 @@ model Organization {
 }
 
 model OrganizationMembership {
-  id             String           @id @default(cuid())
-  organizationId String
-  userId         String
-  role           OrgRole          @default(MENTEE)
-  status         MembershipStatus @default(ACTIVE)
-  invitedById    String?
-  joinedAt       DateTime?        @default(now())
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  id                    String           @id @default(cuid())
+  organizationId        String
+  userId                String
+  role                  OrgRole          @default(MENTEE)
+  status                MembershipStatus @default(ACTIVE)
+  selfTrackingEnabled   Boolean          @default(false)
+  selfTrackingEnabledAt DateTime?
+  invitedById           String?
+  joinedAt              DateTime?        @default(now())
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -380,8 +382,9 @@ model CohortEnrollment {
 model DailyReport {
   id             String           @id @default(cuid())
   organizationId String
-  cohortId       String
+  cohortId       String?
   menteeId       String
+  isSelfTracked  Boolean          @default(false)
   reportDate     DateTime
   workDone       String
   learning       String
@@ -396,7 +399,7 @@ model DailyReport {
   updatedAt      DateTime         @updatedAt
 
   organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  cohort       Cohort         @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  cohort       Cohort?        @relation(fields: [cohortId], references: [id], onDelete: Cascade)
   mentee       User           @relation(fields: [menteeId], references: [id], onDelete: Cascade)
   links        ReportLink[]
   reviews      ReportReview[]
@@ -405,6 +408,7 @@ model DailyReport {
   @@index([cohortId, reportDate])
   @@index([menteeId, reportDate])
   @@index([organizationId, status])
+  @@index([organizationId, menteeId, isSelfTracked, reportDate])
 }
 
 model ReportLink {
@@ -438,6 +442,7 @@ model Task {
   id              String       @id @default(cuid())
   organizationId  String
   cohortId        String?
+  isSelfTracked   Boolean      @default(false)
   title           String
   description     String
   priority        TaskPriority @default(NORMAL)
@@ -459,6 +464,7 @@ model Task {
 
   @@index([organizationId, cohortId])
   @@index([createdById])
+  @@index([organizationId, createdById, isSelfTracked])
 }
 
 model TaskAssignment {
@@ -877,6 +883,7 @@ model Blocker {
   cohortId         String?
   menteeId         String
   mentorId         String?
+  isSelfTracked    Boolean        @default(false)
   title            String
   description      String
   category         String         @default("General")

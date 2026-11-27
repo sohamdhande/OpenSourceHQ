@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { formatDate, formatDateTime } from "@/lib/date";
-import { getDateKeyInTimeZone } from "@/lib/timezone";
+import { computeReportingStreak, getDateKeyInTimeZone } from "@/lib/timezone";
 import {
   FileText,
   CheckSquare,
@@ -84,18 +84,10 @@ export default async function StudentDashboardPage({ params }: { params: { orgSl
   });
 
   const dates = new Set(pastReports.map((r) => r.reportDate.toISOString().split("T")[0]));
-  let streak = 0;
-  if (pastReports.length > 0) {
-    let checkDate = new Date(today);
-    const todayStr = checkDate.toISOString().split("T")[0];
-    if (!dates.has(todayStr)) {
-      checkDate.setUTCDate(checkDate.getUTCDate() - 1);
-    }
-    while (dates.has(checkDate.toISOString().split("T")[0])) {
-      streak++;
-      checkDate.setUTCDate(checkDate.getUTCDate() - 1);
-    }
-  }
+  const streak = computeReportingStreak(
+    pastReports.map((r) => r.reportDate),
+    today
+  );
 
   // Visual 7-day check-in pills
   const last7Days = Array.from({ length: 7 }, (_, i) => {

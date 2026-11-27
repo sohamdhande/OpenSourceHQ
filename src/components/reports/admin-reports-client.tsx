@@ -48,7 +48,7 @@ export interface ReportLinkItem {
 export interface ReportItem {
   id: string;
   organizationId: string;
-  cohortId: string;
+  cohortId: string | null;
   menteeId: string;
   reportDate: Date | string;
   workDone: string;
@@ -72,7 +72,7 @@ export interface ReportItem {
     id: string;
     name: string;
     slug?: string;
-  };
+  } | null;
   links: ReportLinkItem[];
   reviews: ReportReviewItem[];
 }
@@ -198,7 +198,7 @@ export function AdminReportsClient({
           const q = searchQuery.toLowerCase();
           const matchMentee = r.mentee.name.toLowerCase().includes(q);
           const matchEmail = r.mentee.email.toLowerCase().includes(q);
-          const matchCohort = r.cohort.name.toLowerCase().includes(q);
+          const matchCohort = (r.cohort?.name || "").toLowerCase().includes(q);
           const matchWork = r.workDone.toLowerCase().includes(q);
           const matchLearning = r.learning.toLowerCase().includes(q);
           const matchBlockers = (r.blockers || "").toLowerCase().includes(q);
@@ -256,7 +256,7 @@ export function AdminReportsClient({
       formatDate(r.reportDate),
       `"${r.mentee.name.replace(/"/g, '""')}"`,
       `"${r.mentee.email}"`,
-      `"${r.cohort.name.replace(/"/g, '""')}"`,
+      `"${(r.cohort?.name || "Personal").replace(/"/g, '""')}"`,
       r.hoursSpent ?? "",
       r.status,
       r.visibility,
@@ -658,7 +658,7 @@ export function AdminReportsClient({
                         </div>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <span className="inline-block px-1.5 py-0.2 rounded text-[10px] font-mono text-muted-foreground bg-muted border border-border">
-                            {report.cohort.name}
+                            {report.cohort?.name || "Personal"}
                           </span>
                         </div>
                       </div>
@@ -976,7 +976,7 @@ export function AdminReportsClient({
                     {/* Cohort */}
                     <td className="py-2.5 px-3">
                       <span className="text-[11px] text-muted-foreground max-w-[140px] truncate block">
-                        {report.cohort.name}
+                        {report.cohort?.name || "Personal"}
                       </span>
                     </td>
 
@@ -1059,7 +1059,7 @@ export function AdminReportsClient({
                     {selectedReport.mentee.name} — Progress Report
                   </h3>
                   <p className="text-[11px] font-mono text-muted-foreground">
-                    {selectedReport.cohort.name} &bull; {formatDate(selectedReport.reportDate)}
+                    {selectedReport.cohort?.name || "Personal"} &bull; {formatDate(selectedReport.reportDate)}
                   </p>
                 </div>
               </div>

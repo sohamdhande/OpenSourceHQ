@@ -117,26 +117,33 @@ export async function syncSelectedGitHubRepository(repositoryId: string, organiz
     stored += 1;
   };
 
+  const pendingWrites: Array<{ eventId: string; type: GitHubActivityType; title: string; summary?: string | null; url?: string | null; occurredAt: Date; accountId?: number; metadata?: Record<string, string | number | boolean | null> }> = [];
+
   for (const commit of commits) {
     if (!commit.sha) continue;
     const message = commit.commit?.message || commit.sha.slice(0, 8);
     const occurredAt = parseGitHubDate(commit.commit?.author?.date || commit.commit?.committer?.date);
     if (!occurredAt) continue;
-    await persist({ eventId: `commit_${repository.id}_${commit.sha}`, type: GitHubActivityType.COMMIT, title: `Commit: ${message.split("\n")[0]}`, summary: message, url: commit.html_url, occurredAt, accountId: commit.author?.id });
+    pendingWrites.push({ eventId: `commit_${repository.id}_${commit.sha}`, type: GitHubActivityType.COMMIT, title: `Commit: ${message.split("\n")[0]}`, summary: message, url: commit.html_url, occurredAt, accountId: commit.author?.id });
   }
   for (const pr of pullRequests) {
     const action = pr.state === "open" ? "opened" : "closed";
     const type = pr.merged_at ? GitHubActivityType.PULL_REQUEST_MERGED : pr.state === "closed" ? GitHubActivityType.PULL_REQUEST_CLOSED : GitHubActivityType.PULL_REQUEST_OPENED;
     const occurredAt = parseGitHubDate(pr.updated_at || pr.created_at);
     if (!occurredAt) continue;
-    await persist({ eventId: `pr_${repository.id}_${pr.number}_${action}`, type, title: `PR #${pr.number} ${action}: ${pr.title}`, summary: pr.body, url: pr.html_url, occurredAt, accountId: pr.user?.id, metadata: { number: pr.number, action } });
+    pendingWrites.push({ eventId: `pr_${repository.id}_${pr.number}_${action}`, type, title: `PR #${pr.number} ${action}: ${pr.title}`, summary: pr.body, url: pr.html_url, occurredAt, accountId: pr.user?.id, metadata: { number: pr.number, action } });
   }
   for (const issue of issues) {
     if (issue.pull_request) continue;
     const action = issue.state === "open" ? "opened" : "closed";
     const occurredAt = parseGitHubDate(issue.updated_at || issue.created_at);
     if (!occurredAt) continue;
-    await persist({ eventId: `issue_${repository.id}_${issue.number}_${action}`, type: issue.state === "closed" ? GitHubActivityType.ISSUE_CLOSED : GitHubActivityType.ISSUE_OPENED, title: `Issue #${issue.number} ${action}: ${issue.title}`, summary: issue.body, url: issue.html_url, occurredAt, accountId: issue.user?.id, metadata: { number: issue.number, action } });
+    pendingWrites.push({ eventId: `issue_${repository.id}_${issue.number}_${action}`, type: issue.state === "closed" ? GitHubActivityType.ISSUE_CLOSED : GitHubActivityType.ISSUE_OPENED, title: `Issue #${issue.number} ${action}: ${issue.title}`, summary: issue.body, url: issue.html_url, occurredAt, accountId: issue.user?.id, metadata: { number: issue.number, action } });
+  }
+
+  const WRITE_BATCH_SIZE = 15;
+  for (let i = 0; i < pendingWrites.length; i += WRITE_BATCH_SIZE) {
+    await Promise.all(pendingWrites.slice(i, i + WRITE_BATCH_SIZE).map((item) => persist(item)));
   }
 
     await prisma.repository.update({ where: { id: repository.id }, data: { lastSyncedAt: new Date(), syncStatus: "ACTIVE" } });

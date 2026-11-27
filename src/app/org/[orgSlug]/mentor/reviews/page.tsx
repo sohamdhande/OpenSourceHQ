@@ -111,7 +111,7 @@ export default async function MentorReviewsPage({ params }: { params: { orgSlug:
                     </Badge>
                   </div>
                   <div className="text-[10px] text-muted-foreground">
-                    Report Date: {formatDate(r.report.reportDate)} &bull; {r.report.cohort.name}
+                    Report Date: {formatDate(r.report.reportDate)} &bull; {r.report.cohort?.name || "Cohort"}
                   </div>
                   <p className="text-muted-foreground mt-1 whitespace-pre-wrap">{r.comment}</p>
                 </div>

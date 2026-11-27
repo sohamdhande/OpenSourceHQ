@@ -4,6 +4,24 @@ import bcrypt from "bcryptjs";
 import { createSessionCookie } from "@/server/auth/session";
 import { LoginSchema } from "@/lib/schemas";
 
+const LOGIN_WINDOW_MS = 5 * 60 * 1000;
+const MAX_LOGIN_ATTEMPTS = 15;
+const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+
+function checkLoginRateLimit(key: string): { allowed: boolean; retryAfterSec?: number } {
+  const now = Date.now();
+  const entry = loginAttempts.get(key);
+  if (!entry || entry.resetAt <= now) {
+    loginAttempts.set(key, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
+    return { allowed: true };
+  }
+  if (entry.count >= MAX_LOGIN_ATTEMPTS) {
+    return { allowed: false, retryAfterSec: Math.max(1, Math.ceil((entry.resetAt - now) / 1000)) };
+  }
+  entry.count += 1;
+  return { allowed: true };
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -12,9 +30,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: { code: "INVALID_INPUT", message: "Invalid email or password format" } }, { status: 400 });
     }
 
-    const { email, password } = parsed.data;
+    const normalizedEmail = parsed.data.email.toLowerCase().trim();
+    const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
+    const rateCheck = checkLoginRateLimit(`${clientIp}:${normalizedEmail}`);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: { code: "TOO_MANY_REQUESTS", message: "Too many sign-in attempts. Please wait a few minutes and try again." } },
+        { status: 429, headers: { "Retry-After": String(rateCheck.retryAfterSec ?? 60) } }
+      );
+    }
+
+    const { password } = parsed.data;
     const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase().trim() },
+      where: { email: normalizedEmail },
       include: {
         memberships: {
           where: { status: "ACTIVE" },
@@ -31,6 +59,15 @@ export async function POST(req: NextRequest) {
     if (!isValid) {
       return NextResponse.json({ error: { code: "INVALID_CREDENTIALS", message: "Invalid credentials" } }, { status: 401 });
     }
+
+    if (user.status !== "ACTIVE") {
+      return NextResponse.json(
+        { error: { code: "ACCOUNT_SUSPENDED", message: "Your OpenSourceHQ account is suspended. Contact your organization administrator." } },
+        { status: 403 }
+      );
+    }
+
+    loginAttempts.delete(`${clientIp}:${normalizedEmail}`);
 
     const activeOrg = user.memberships[0];
     const sessionCookie = createSessionCookie({

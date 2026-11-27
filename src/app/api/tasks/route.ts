@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/server/auth/session";
-import { createTask } from "@/features/tasks/tasks-service";
-import { TaskCreateSchema } from "@/lib/schemas";
+import { createSelfTrackedTask, createTask } from "@/features/tasks/tasks-service";
+import { SelfTrackedTaskCreateSchema, TaskCreateSchema } from "@/lib/schemas";
+import { canUseSelfTracking } from "@/server/authorization/policies";
 import { TaskAssignmentStatus } from "@prisma/client";
 import prisma from "@/lib/db";
 
@@ -16,6 +17,7 @@ export async function GET(req: NextRequest) {
   const cohortId = searchParams.get("cohortId");
   const menteeId = searchParams.get("menteeId");
   const status = searchParams.get("status") as TaskAssignmentStatus | null;
+  const mode = searchParams.get("mode");
   const validAssignmentStatuses = new Set(["TODO", "IN_PROGRESS", "SUBMITTED", "UNDER_REVIEW", "CHANGES_REQUESTED", "RESUBMITTED", "COMPLETED", "BLOCKED", "CANCELLED", "OVERDUE"]);
   if (status && !validAssignmentStatuses.has(status)) {
     return NextResponse.json({ error: { code: "INVALID_STATUS", message: "Unsupported task assignment status." } }, { status: 400 });
@@ -23,6 +25,28 @@ export async function GET(req: NextRequest) {
 
   if (!organizationId) {
     return NextResponse.json({ error: { code: "BAD_REQUEST", message: "organizationId required" } }, { status: 400 });
+  }
+
+  if (mode === "self") {
+    if (!(await canUseSelfTracking(session, organizationId))) {
+      return NextResponse.json({ error: { code: "FORBIDDEN", message: "Self-tracking is not enabled for this organization." } }, { status: 403 });
+    }
+    const tasks = await prisma.task.findMany({
+      where: {
+        organizationId,
+        createdById: session.id,
+        isSelfTracked: true,
+        archivedAt: null,
+      },
+      include: {
+        repository: { select: { id: true, fullName: true } },
+        assignments: {
+          where: { menteeId: session.id },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    return NextResponse.json({ tasks });
   }
 
   const membership = session.isPlatformSuperAdmin ? null : await prisma.organizationMembership.findUnique({
@@ -36,7 +60,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: { code: "FORBIDDEN", message: "Observers can view program-level summaries, not individual task assignments or submission evidence" } }, { status: 403 });
   }
 
-  const whereClause: any = { organizationId, archivedAt: null };
+  const whereClause: any = { organizationId, archivedAt: null, isSelfTracked: false };
   let scopedMenteeIdsForAssignments: string[] = [];
   if (cohortId) whereClause.cohortId = cohortId;
 
@@ -112,6 +136,19 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
+    const organizationId = typeof body?.organizationId === "string" ? body.organizationId : session.activeOrgId;
+    if (body?.mode === "self") {
+      if (!organizationId) {
+        return NextResponse.json({ error: { code: "BAD_REQUEST", message: "organizationId required" } }, { status: 400 });
+      }
+      const parsedSelf = SelfTrackedTaskCreateSchema.safeParse({ ...body, organizationId });
+      if (!parsedSelf.success) {
+        return NextResponse.json({ error: { code: "VALIDATION_ERROR", message: parsedSelf.error.message } }, { status: 400 });
+      }
+      const task = await createSelfTrackedTask(session, parsedSelf.data);
+      return NextResponse.json({ success: true, task });
+    }
+
     const parsed = TaskCreateSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json({ error: { code: "VALIDATION_ERROR", message: parsed.error.message } }, { status: 400 });

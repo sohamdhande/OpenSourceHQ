@@ -35,3 +35,14 @@ Use a restrained neutral canvas, crisp cards, hairline borders, controlled indig
 ## Detailed reference
 
 See [`docs/UI_UX_REFERENCE_AND_SYSTEM.md`](docs/UI_UX_REFERENCE_AND_SYSTEM.md) for design inspirations, component rules, role-specific layouts, and the repository discovery journey.
+
+## Components (Self-Tracking Glassy-Black System)
+
+- `SelfTrackingOnboardingModal` (`src/components/self-tracking/self-tracking-onboarding-modal.tsx`) — Full-screen glassy-black opt-in modal (`bg-black/80 backdrop-blur-xl`, `bg-zinc-950/90`, `border-white/10`).
+- `SelfTrackingLayout` (`src/app/org/[orgSlug]/self/layout.tsx`) & `.self-glass-theme` / `.self-glass-surface` (`src/app/globals.css`) — Scoped obsidian glassy-black token system (`#050507` canvas, `rgba(255,255,255,0.03)` translucent cards, `backdrop-filter: blur(20px)`, layered inset+ambient shadows, and `prefers-reduced-motion` guard).
+- `SelfTrackingLoading` (`src/app/org/[orgSlug]/self/loading.tsx`) — Skeleton loader matching the self-tracking dashboard geometry.
+
+## Decisions
+
+- 2026-11-27 — Added scoped `.self-glass-theme` CSS custom properties in `src/app/globals.css` so the `/org/[orgSlug]/self/*` personal workspace renders in full glassy-black obsidian across both new and reused components (`GitHubCommandCenter`, `MemberRepositoriesClient`, `ActivityTimeline`) without altering admin, mentor, or mentee workspace themes.
+- 2026-11-27 — Extended glassmorphism (`AppShellFrame` in `src/components/layout/app-shell-frame.tsx`, `Sidebar`, `Topbar`, `blur(24px) saturate(160%)`, specular top highlights, and ambient depth orbs) across the entire `/self/*` shell.

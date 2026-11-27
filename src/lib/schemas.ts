@@ -67,6 +67,37 @@ export const DailyReportCreateSchema = z.object({
     .optional(),
 });
 
+export const SelfTrackedReportCreateSchema = z.object({
+  organizationId: z.string(),
+  reportDate: z.string(),
+  workDone: z.string().min(5, "Work completed must be at least 5 characters"),
+  learning: z.string().min(5, "Key learnings must be at least 5 characters"),
+  blockers: z.string().optional().nullable(),
+  nextSteps: z.string().min(5, "Next steps must be at least 5 characters"),
+  hoursSpent: z.number().min(0).max(24).optional().nullable(),
+  status: z.enum(["DRAFT", "SUBMITTED"]).default("SUBMITTED"),
+  links: z
+    .array(
+      z.object({
+        url: z.string().url(),
+        label: z.string().min(1),
+        type: z.string().default("GITHUB"),
+      })
+    )
+    .optional(),
+});
+
+export const SelfTrackedTaskCreateSchema = z.object({
+  organizationId: z.string(),
+  title: z.string().min(3),
+  description: z.string().min(5),
+  priority: z.enum(["LOW", "NORMAL", "HIGH", "URGENT"]).default("NORMAL"),
+  category: z.string().default("General"),
+  repositoryId: z.string().optional().nullable(),
+  externalIssueUrl: z.string().url().optional().nullable().or(z.literal("")),
+  dueAt: z.string().optional().nullable(),
+});
+
 export const ReportReviewSchema = z.object({
   reportId: z.string(),
   decision: z.enum(["REVIEWED", "CHANGES_REQUESTED"]),

@@ -2,7 +2,7 @@ import prisma from "@/lib/db";
 import { TaskPriority, TaskAssignmentStatus, TaskReviewDecision } from "@prisma/client";
 import { logAudit } from "@/lib/audit";
 import { SessionUser } from "@/server/auth/session";
-import { canManageTask } from "@/server/authorization/policies";
+import { canManageTask, canUseSelfTracking } from "@/server/authorization/policies";
 
 export interface CreateTaskInput {
   organizationId: string;
@@ -16,6 +16,131 @@ export interface CreateTaskInput {
   externalIssueUrl?: string | null;
   dueAt?: Date | string | null;
   assigneeIds: string[];
+}
+
+export interface CreateSelfTrackedTaskInput {
+  organizationId: string;
+  title: string;
+  description: string;
+  priority?: TaskPriority;
+  category?: string;
+  repositoryId?: string | null;
+  externalIssueUrl?: string | null;
+  dueAt?: Date | string | null;
+}
+
+export async function createSelfTrackedTask(user: SessionUser, input: CreateSelfTrackedTaskInput) {
+  if (!input.title?.trim() || !input.description?.trim()) {
+    throw new Error("Task title and description are required.");
+  }
+  const allowed = await canUseSelfTracking(user, input.organizationId);
+  if (!allowed) {
+    throw new Error("Self-tracking must be enabled for your organization membership to create personal tasks.");
+  }
+
+  if (input.repositoryId) {
+    const repository = await prisma.repository.findFirst({
+      where: { id: input.repositoryId, organizationId: input.organizationId },
+      select: { id: true },
+    });
+    if (!repository) throw new Error("Selected repository does not belong to this organization.");
+  }
+
+  const dueAt = input.dueAt ? new Date(input.dueAt) : null;
+  if (dueAt && Number.isNaN(dueAt.getTime())) throw new Error("Due date is invalid.");
+
+  const task = await prisma.task.create({
+    data: {
+      organizationId: input.organizationId,
+      cohortId: null,
+      isSelfTracked: true,
+      title: input.title.trim(),
+      description: input.description.trim(),
+      priority: input.priority || TaskPriority.NORMAL,
+      category: input.category || "General",
+      createdById: user.id,
+      repositoryId: input.repositoryId || null,
+      externalIssueUrl: input.externalIssueUrl || null,
+      dueAt,
+      assignments: {
+        create: {
+          menteeId: user.id,
+          assignedById: user.id,
+          status: TaskAssignmentStatus.TODO,
+        },
+      },
+    },
+    include: {
+      assignments: { include: { mentee: { select: { id: true, name: true, email: true } } } },
+      repository: { select: { id: true, fullName: true, url: true } },
+    },
+  });
+
+  await logAudit({
+    organizationId: input.organizationId,
+    actorId: user.id,
+    action: "SELF_TRACKED_TASK_CREATED",
+    targetType: "Task",
+    targetId: task.id,
+    metadata: { title: task.title, isSelfTracked: true },
+  });
+
+  return task;
+}
+
+export async function updateSelfTrackedTaskStatus(
+  user: SessionUser,
+  taskId: string,
+  status: "TODO" | "IN_PROGRESS" | "COMPLETED"
+) {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: { assignments: true },
+  });
+  if (!task || !task.isSelfTracked) {
+    throw new Error("Personal task not found.");
+  }
+  if (task.createdById !== user.id) {
+    throw new Error("You can only update your own personal tasks.");
+  }
+  if (!(await canUseSelfTracking(user, task.organizationId))) {
+    throw new Error("Self-tracking is not enabled for this organization.");
+  }
+
+  const assignment = task.assignments.find((a) => a.menteeId === user.id);
+  if (!assignment) {
+    throw new Error("Personal task assignment not found.");
+  }
+
+  const nextStatus = status as TaskAssignmentStatus;
+  const updatedAssignment = await prisma.taskAssignment.update({
+    where: { id: assignment.id },
+    data: {
+      status: nextStatus,
+      completedAt: nextStatus === TaskAssignmentStatus.COMPLETED ? new Date() : null,
+    },
+  });
+
+  return updatedAssignment;
+}
+
+export async function deleteSelfTrackedTask(user: SessionUser, taskId: string) {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { id: true, organizationId: true, createdById: true, isSelfTracked: true },
+  });
+  if (!task || !task.isSelfTracked) {
+    throw new Error("Personal task not found.");
+  }
+  if (task.createdById !== user.id) {
+    throw new Error("You can only delete your own personal tasks.");
+  }
+  if (!(await canUseSelfTracking(user, task.organizationId))) {
+    throw new Error("Self-tracking is not enabled for this organization.");
+  }
+
+  await prisma.task.delete({ where: { id: task.id } });
+  return { deleted: true };
 }
 
 export async function createTask(user: SessionUser, input: CreateTaskInput) {

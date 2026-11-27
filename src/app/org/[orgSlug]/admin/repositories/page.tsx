@@ -31,6 +31,7 @@ export default async function AdminRepositoriesPage({ params }: { params: { orgS
     description: r.description,
     defaultBranch: r.defaultBranch,
     syncStatus: r.syncStatus,
+    lastSyncedAt: r.lastSyncedAt ? r.lastSyncedAt.toISOString() : null,
     cohortRepositories: r.cohortRepositories.map((cr) => ({
       id: cr.id,
       cohort: { id: cr.cohort.id, name: cr.cohort.name },

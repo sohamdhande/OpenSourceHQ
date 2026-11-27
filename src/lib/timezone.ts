@@ -87,3 +87,19 @@ export function formatDateTimeInTimeZone(input: Date | string, timeZone: string)
     }).format(date);
   }
 }
+
+/** Count consecutive days with at least one report ending today (or yesterday if today is not logged yet). */
+export function computeReportingStreak(reportDates: Date[], today: Date): number {
+  if (reportDates.length === 0) return 0;
+  const dateSet = new Set(reportDates.map((d) => d.toISOString().split("T")[0]));
+  const checkDate = new Date(today);
+  if (!dateSet.has(checkDate.toISOString().split("T")[0])) {
+    checkDate.setUTCDate(checkDate.getUTCDate() - 1);
+  }
+  let streak = 0;
+  while (dateSet.has(checkDate.toISOString().split("T")[0])) {
+    streak += 1;
+    checkDate.setUTCDate(checkDate.getUTCDate() - 1);
+  }
+  return streak;
+}

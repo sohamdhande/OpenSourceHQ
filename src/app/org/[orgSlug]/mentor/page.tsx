@@ -432,7 +432,7 @@ export default async function MentorDashboardPage({ params }: { params: { orgSlu
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-foreground">{r.mentee.name}</span>
-                          <span className="text-[11px] text-muted-foreground">({r.cohort.name})</span>
+                          <span className="text-[11px] text-muted-foreground">({r.cohort?.name || "Cohort"})</span>
                           <Badge variant={r.status === "RESUBMITTED" ? "warning" : "secondary"} className="text-[9px]">
                             {r.status}
                           </Badge>

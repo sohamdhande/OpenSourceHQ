@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,8 @@ import {
   AlertCircle,
   CheckCircle2,
   GitBranch,
+  RefreshCw,
+  X,
 } from "lucide-react";
 
 interface RepositoryItem {
@@ -27,6 +30,7 @@ interface RepositoryItem {
   description?: string | null;
   defaultBranch: string;
   syncStatus: string;
+  lastSyncedAt?: string | null;
   cohortRepositories: Array<{ id: string; cohort: { id: string; name: string } }>;
   _count: { activities: number; tasks: number };
 }
@@ -49,11 +53,15 @@ export function AdminRepositoriesClient({
   orgId,
   orgSlug,
 }: AdminRepositoriesClientProps) {
+  const router = useRouter();
   const [repositories, setRepositories] = useState<RepositoryItem[]>(initialRepos);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingRepo, setEditingRepo] = useState<RepositoryItem | null>(null);
   const [deletingRepoId, setDeletingRepoId] = useState<string | null>(null);
   const [togglingRepoId, setTogglingRepoId] = useState<string | null>(null);
+  const [syncingRepoId, setSyncingRepoId] = useState<string | null>(null);
+  const [syncingAll, setSyncingAll] = useState(false);
+  const [syncBanner, setSyncBanner] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   // Add Form states
   const [ownerLogin, setOwnerLogin] = useState("");
@@ -216,6 +224,114 @@ export function AdminRepositoriesClient({
     }
   };
 
+  const handleSyncRepository = async (repo: RepositoryItem) => {
+    setSyncingRepoId(repo.id);
+    setSyncBanner(null);
+
+    try {
+      const res = await fetch(`/api/github/repositories/${repo.id}/sync`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error?.message || `Failed to sync ${repo.fullName}`);
+      }
+
+      const processed = data.result?.activitiesProcessed ?? 0;
+      const nextCount = typeof data.activityCount === "number" ? data.activityCount : repo._count.activities;
+      const nowIso = new Date().toISOString();
+
+      setRepositories((prev) =>
+        prev.map((r) =>
+          r.id === repo.id
+            ? {
+                ...r,
+                syncStatus: "ACTIVE",
+                lastSyncedAt: nowIso,
+                _count: { ...r._count, activities: nextCount },
+              }
+            : r
+        )
+      );
+      setSyncBanner({
+        type: "success",
+        message: `Synced ${repo.fullName}: ${processed} activities processed.`,
+      });
+      router.refresh();
+    } catch (err: unknown) {
+      setSyncBanner({
+        type: "error",
+        message: `${repo.fullName}: ${err instanceof Error ? err.message : "Sync failed"}`,
+      });
+    } finally {
+      setSyncingRepoId(null);
+    }
+  };
+
+  const handleSyncAllRepositories = async () => {
+    setSyncingAll(true);
+    setSyncBanner(null);
+
+    try {
+      const res = await fetch(`/api/orgs/${orgId}/repositories/sync`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error?.message || "Failed to sync repositories");
+      }
+
+      const summary = data.summary || { synced: 0, skippedCooldown: 0, failed: 0, totalActivities: 0 };
+      const results: Array<{
+        repositoryId: string;
+        status: "synced" | "cooldown" | "failed";
+        activityCount?: number;
+      }> = Array.isArray(data.results) ? data.results : [];
+
+      const nowIso = new Date().toISOString();
+      const resultMap = new Map(results.map((item) => [item.repositoryId, item]));
+
+      setRepositories((prev) =>
+        prev.map((r) => {
+          const item = resultMap.get(r.id);
+          if (!item) return r;
+          if (item.status === "synced") {
+            return {
+              ...r,
+              syncStatus: "ACTIVE",
+              lastSyncedAt: nowIso,
+              _count: {
+                ...r._count,
+                activities: typeof item.activityCount === "number" ? item.activityCount : r._count.activities,
+              },
+            };
+          }
+          if (item.status === "failed") {
+            return { ...r, syncStatus: "ERROR" };
+          }
+          return r;
+        })
+      );
+
+      const parts = [`Synced ${summary.synced} repositories (${summary.totalActivities} activities)`];
+      if (summary.skippedCooldown > 0) parts.push(`${summary.skippedCooldown} skipped (cooldown)`);
+      if (summary.failed > 0) parts.push(`${summary.failed} failed`);
+
+      setSyncBanner({
+        type: summary.failed > 0 && summary.synced === 0 ? "error" : "success",
+        message: parts.join(" · "),
+      });
+      router.refresh();
+    } catch (err: unknown) {
+      setSyncBanner({
+        type: "error",
+        message: err instanceof Error ? err.message : "Failed to sync repositories",
+      });
+    } finally {
+      setSyncingAll(false);
+    }
+  };
+
   const handleCohortToggleInAdd = (cohortId: string) => {
     setSelectedCohortIds((prev) =>
       prev.includes(cohortId) ? prev.filter((id) => id !== cohortId) : [...prev, cohortId]
@@ -240,18 +356,58 @@ export function AdminRepositoriesClient({
             Configure tracked open-source repositories, map them to cohorts, or pause and resume webhook telemetry.
           </p>
         </div>
-        <Button
-          size="sm"
-          onClick={() => {
-            setAddError(null);
-            setShowAddModal(true);
-          }}
-          className="flex items-center gap-1.5 shadow-sm"
-        >
-          <Plus className="w-4 h-4" />
-          Track New Repository
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleSyncAllRepositories}
+            disabled={syncingAll || repositories.length === 0}
+            className="flex items-center gap-1.5"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${syncingAll ? "animate-spin" : ""}`} />
+            {syncingAll ? "Syncing All..." : "Sync All Repos"}
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => {
+              setAddError(null);
+              setShowAddModal(true);
+            }}
+            className="flex items-center gap-1.5 shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Track New Repository
+          </Button>
+        </div>
       </div>
+
+      {syncBanner && (
+        <div
+          role={syncBanner.type === "error" ? "alert" : "status"}
+          className={`flex items-center justify-between gap-3 rounded-lg border px-3.5 py-2.5 text-xs ${
+            syncBanner.type === "error"
+              ? "border-destructive/30 bg-destructive/10 text-destructive"
+              : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+          }`}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            {syncBanner.type === "error" ? (
+              <AlertCircle className="w-4 h-4 shrink-0" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+            )}
+            <span className="truncate">{syncBanner.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSyncBanner(null)}
+            aria-label="Dismiss sync notice"
+            className="rounded p-0.5 hover:bg-black/10 dark:hover:bg-white/10"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {repositories.length === 0 ? (
         <Card className="p-12 text-center border-dashed border-border/80 bg-card/40">
@@ -366,7 +522,18 @@ export function AdminRepositoriesClient({
 
                   {/* Actions Toolbar */}
                   <div className="flex items-center justify-between pt-2 border-t border-border/60">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleSyncRepository(repo)}
+                        disabled={syncingRepoId === repo.id || syncingAll || !isTracking}
+                        className="h-7 text-[11px] px-2.5 gap-1.5"
+                        title={!isTracking ? "Resume tracking before syncing" : `Sync ${repo.fullName}`}
+                      >
+                        <RefreshCw className={`w-3 h-3 ${syncingRepoId === repo.id ? "animate-spin" : ""}`} />
+                        {syncingRepoId === repo.id ? "Syncing..." : "Sync"}
+                      </Button>
                       <Button
                         size="sm"
                         variant={isTracking ? "outline" : "primary"}

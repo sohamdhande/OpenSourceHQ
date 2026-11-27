@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { syncSelectedGitHubRepository } from "@/features/github/public-repository-sync";
@@ -15,7 +16,11 @@ export async function GET(request: NextRequest) {
   if (!secret) {
     return NextResponse.json({ error: "CRON_SECRET is not configured." }, { status: 503 });
   }
-  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
+  const authHeader = request.headers.get("authorization") || "";
+  const expectedHeader = `Bearer ${secret}`;
+  const authBuf = Buffer.from(authHeader, "utf8");
+  const expectedBuf = Buffer.from(expectedHeader, "utf8");
+  if (authBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(authBuf, expectedBuf)) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 

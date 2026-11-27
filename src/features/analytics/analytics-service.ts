@@ -21,7 +21,7 @@ export async function getOrganizationAnalytics(organizationId: string) {
     prisma.organizationMembership.count({ where: { organizationId, role: "MENTEE", status: "ACTIVE" } }),
     prisma.cohort.count({ where: { organizationId, status: "ACTIVE" } }),
     prisma.dailyReport.findMany({
-      where: { organizationId },
+      where: { organizationId, isSelfTracked: false },
       select: {
         id: true,
         cohortId: true,
@@ -33,7 +33,7 @@ export async function getOrganizationAnalytics(organizationId: string) {
     }),
     prisma.taskAssignment.findMany({
       where: {
-        task: { organizationId, archivedAt: null },
+        task: { organizationId, archivedAt: null, isSelfTracked: false },
         mentee: { memberships: { some: { organizationId, role: "MENTEE", status: "ACTIVE" } } },
         status: { not: "CANCELLED" },
       },
@@ -44,7 +44,7 @@ export async function getOrganizationAnalytics(organizationId: string) {
       },
     }),
     prisma.blocker.findMany({
-      where: { organizationId },
+      where: { organizationId, isSelfTracked: false },
       select: {
         id: true,
         cohortId: true,

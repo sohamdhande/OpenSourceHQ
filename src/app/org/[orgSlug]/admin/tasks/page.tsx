@@ -11,7 +11,7 @@ export default async function AdminTasksPage({ params }: { params: { orgSlug: st
   if (!org) return null;
 
   const tasks = await prisma.task.findMany({
-    where: { organizationId: org.id },
+    where: { organizationId: org.id, isSelfTracked: false },
     include: {
       creator: { select: { id: true, name: true } },
       cohort: { select: { id: true, name: true } },

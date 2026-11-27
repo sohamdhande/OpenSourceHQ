@@ -2,7 +2,7 @@ import { formatDate } from "@/lib/date";
 import prisma from "@/lib/db";
 import { ReportStatus, ReportVisibility, ReportReviewDecision } from "@prisma/client";
 import { logAudit } from "@/lib/audit";
-import { canReviewReport, canViewReport } from "@/server/authorization/policies";
+import { canReviewReport, canUseSelfTracking, canViewReport } from "@/server/authorization/policies";
 import { SessionUser } from "@/server/auth/session";
 
 export interface CreateReportInput {
@@ -19,6 +19,101 @@ export interface CreateReportInput {
   status?: ReportStatus;
   revisionNotes?: string | null;
   links?: { url: string; label: string; type?: string }[];
+}
+
+export interface CreateSelfTrackedReportInput {
+  organizationId: string;
+  reportDate: string | Date;
+  workDone: string;
+  learning: string;
+  blockers?: string | null;
+  nextSteps: string;
+  hoursSpent?: number | null;
+  status?: ReportStatus;
+  links?: { url: string; label: string; type?: string }[];
+}
+
+export async function submitSelfTrackedReport(user: SessionUser, input: CreateSelfTrackedReportInput) {
+  if (typeof input.reportDate === "string" && !/^\d{4}-\d{2}-\d{2}$/.test(input.reportDate)) {
+    throw new Error("Report date must use YYYY-MM-DD format.");
+  }
+  const parsedDate = new Date(input.reportDate);
+  if (Number.isNaN(parsedDate.getTime())) throw new Error("Report date is invalid.");
+  parsedDate.setUTCHours(0, 0, 0, 0);
+  if (input.hoursSpent != null && (!Number.isFinite(input.hoursSpent) || input.hoursSpent < 0 || input.hoursSpent > 24)) {
+    throw new Error("Hours spent must be between 0 and 24.");
+  }
+
+  const allowed = await canUseSelfTracking(user, input.organizationId);
+  if (!allowed) {
+    throw new Error("Self-tracking must be enabled for your organization membership to log personal progress.");
+  }
+
+  const requestedStatus = input.status ?? ReportStatus.SUBMITTED;
+  if (!([ReportStatus.DRAFT, ReportStatus.SUBMITTED] as ReportStatus[]).includes(requestedStatus)) {
+    throw new Error("Personal daily logs can only be saved as drafts or submitted.");
+  }
+
+  const report = await prisma.$transaction(async (tx) => {
+    const existing = await tx.dailyReport.findFirst({
+      where: {
+        organizationId: input.organizationId,
+        menteeId: user.id,
+        cohortId: null,
+        isSelfTracked: true,
+        reportDate: parsedDate,
+      },
+    });
+
+    const isBeingSubmitted = requestedStatus === ReportStatus.SUBMITTED;
+    const reportData = {
+      workDone: input.workDone.trim(),
+      learning: input.learning.trim(),
+      blockers: input.blockers?.trim() || null,
+      nextSteps: input.nextSteps.trim(),
+      hoursSpent: input.hoursSpent ?? null,
+      visibility: ReportVisibility.MENTORS_ONLY,
+      status: requestedStatus,
+      submittedAt: isBeingSubmitted ? new Date() : existing?.submittedAt ?? null,
+      revisionNotes: null,
+    };
+    const links = input.links?.map((link) => ({ url: link.url, label: link.label.trim(), type: link.type || "GITHUB" })) || [];
+
+    if (existing) {
+      return tx.dailyReport.update({
+        where: { id: existing.id },
+        data: {
+          ...reportData,
+          links: { deleteMany: {}, ...(links.length ? { create: links } : {}) },
+        },
+        include: { links: true },
+      });
+    }
+
+    return tx.dailyReport.create({
+      data: {
+        organizationId: input.organizationId,
+        cohortId: null,
+        menteeId: user.id,
+        isSelfTracked: true,
+        reportDate: parsedDate,
+        ...reportData,
+        links: links.length ? { create: links } : undefined,
+      },
+      include: { links: true },
+    });
+  }, { isolationLevel: "Serializable" });
+
+  await logAudit({
+    organizationId: input.organizationId,
+    actorId: user.id,
+    action: requestedStatus === ReportStatus.DRAFT ? "SELF_REPORT_DRAFT_SAVED" : "SELF_REPORT_SUBMITTED",
+    targetType: "DailyReport",
+    targetId: report.id,
+    metadata: { reportDate: parsedDate.toISOString(), isSelfTracked: true },
+  });
+
+  return report;
 }
 
 export async function submitDailyReport(user: SessionUser, input: CreateReportInput) {

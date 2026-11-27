@@ -2,6 +2,7 @@ import prisma from "@/lib/db";
 import { BlockerStatus, BlockerUrgency, BlockerSource } from "@prisma/client";
 import { SessionUser } from "@/server/auth/session";
 import { logAudit } from "@/lib/audit";
+import { canUseSelfTracking } from "@/server/authorization/policies";
 
 export interface CreateBlockerInput {
   organizationId: string;
@@ -16,6 +17,64 @@ export interface CreateBlockerInput {
 
 function sourceIdRequired(source: BlockerSource, sourceId?: string | null): sourceId is string {
   return Boolean(sourceId && source !== BlockerSource.GENERAL);
+}
+
+export async function createSelfTrackedBlocker(user: SessionUser, input: CreateBlockerInput) {
+  if (!(await canUseSelfTracking(user, input.organizationId))) {
+    throw new Error("Self-tracking must be enabled for your organization membership to log personal blockers.");
+  }
+
+  const blocker = await prisma.blocker.create({
+    data: {
+      organizationId: input.organizationId,
+      cohortId: null,
+      menteeId: user.id,
+      mentorId: null,
+      isSelfTracked: true,
+      title: input.title.trim(),
+      description: input.description.trim(),
+      category: input.category || "General",
+      urgency: input.urgency || BlockerUrgency.MEDIUM,
+      status: BlockerStatus.OPEN,
+      source: BlockerSource.GENERAL,
+    },
+    include: {
+      cohort: { select: { id: true, name: true } },
+      mentee: { select: { id: true, name: true, email: true, imageUrl: true } },
+      mentor: { select: { id: true, name: true, email: true, imageUrl: true } },
+    },
+  });
+
+  await logAudit({
+    organizationId: input.organizationId,
+    actorId: user.id,
+    action: "SELF_BLOCKER_CREATED",
+    targetType: "Blocker",
+    targetId: blocker.id,
+    metadata: { urgency: blocker.urgency, title: blocker.title, isSelfTracked: true },
+  });
+  return blocker;
+}
+
+export async function listSelfTrackedBlockers(user: SessionUser, organizationId: string, status?: BlockerStatus) {
+  if (!(await canUseSelfTracking(user, organizationId))) {
+    throw new Error("Self-tracking is not enabled for this organization.");
+  }
+  return prisma.blocker.findMany({
+    where: {
+      organizationId,
+      menteeId: user.id,
+      isSelfTracked: true,
+      ...(status ? { status } : {}),
+    },
+    include: {
+      cohort: { select: { id: true, name: true, slug: true } },
+      mentee: { select: { id: true, name: true, email: true, imageUrl: true } },
+      mentor: { select: { id: true, name: true, email: true } },
+    },
+    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+    take: 100,
+  });
 }
 
 export async function createBlocker(user: SessionUser, input: CreateBlockerInput) {
@@ -153,6 +212,37 @@ export async function createBlocker(user: SessionUser, input: CreateBlockerInput
 export async function resolveBlocker(user: SessionUser, blockerId: string, response: string, status: BlockerStatus = BlockerStatus.RESOLVED) {
   const blocker = await prisma.blocker.findUnique({ where: { id: blockerId }, include: { cohort: true } });
   if (!blocker) throw new Error("Blocker not found");
+  if (blocker.isSelfTracked) {
+    if (blocker.menteeId !== user.id || !(await canUseSelfTracking(user, blocker.organizationId))) {
+      throw new Error("Only the owner can update or resolve their personal blocker.");
+    }
+    if (!([BlockerStatus.RESOLVED, BlockerStatus.IN_PROGRESS] as BlockerStatus[]).includes(status)) {
+      throw new Error("Choose In progress or Resolved.");
+    }
+    const now = new Date();
+    const updated = await prisma.blocker.update({
+      where: { id: blockerId },
+      data: {
+        response: response.trim(),
+        status,
+        firstRespondedAt: blocker.firstRespondedAt || now,
+        resolvedAt: status === BlockerStatus.RESOLVED ? now : null,
+      },
+      include: {
+        mentee: { select: { id: true, name: true, email: true } },
+        mentor: { select: { id: true, name: true, email: true } },
+      },
+    });
+    await logAudit({
+      organizationId: blocker.organizationId,
+      actorId: user.id,
+      action: status === BlockerStatus.RESOLVED ? "SELF_BLOCKER_RESOLVED" : "SELF_BLOCKER_UPDATED",
+      targetType: "Blocker",
+      targetId: blockerId,
+      metadata: { status, isSelfTracked: true },
+    });
+    return updated;
+  }
   const membership = await prisma.organizationMembership.findUnique({ where: { organizationId_userId: { organizationId: blocker.organizationId, userId: user.id } } });
   if (!user.isPlatformSuperAdmin && membership?.status !== "ACTIVE") throw new Error("Active organization membership is required.");
   let allowed = user.isPlatformSuperAdmin || membership?.role === "ORG_ADMIN";
@@ -198,6 +288,21 @@ export async function resolveBlocker(user: SessionUser, blockerId: string, respo
 export async function reopenBlocker(user: SessionUser, blockerId: string, reason?: string) {
   const blocker = await prisma.blocker.findUnique({ where: { id: blockerId } });
   if (!blocker) throw new Error("Blocker not found");
+  if (blocker.isSelfTracked) {
+    if (blocker.menteeId !== user.id || !(await canUseSelfTracking(user, blocker.organizationId))) {
+      throw new Error("Only the owner can reopen their personal blocker.");
+    }
+    if (blocker.status !== BlockerStatus.RESOLVED) throw new Error("Only a resolved blocker can be reopened.");
+    const updated = await prisma.blocker.update({
+      where: { id: blockerId },
+      data: { status: BlockerStatus.REOPENED, resolvedAt: null },
+      include: {
+        mentee: { select: { id: true, name: true, email: true, imageUrl: true } },
+        mentor: { select: { id: true, name: true, email: true, imageUrl: true } },
+      },
+    });
+    return updated;
+  }
   const membership = await prisma.organizationMembership.findUnique({ where: { organizationId_userId: { organizationId: blocker.organizationId, userId: user.id } } });
   if (blocker.menteeId !== user.id || (!user.isPlatformSuperAdmin && (membership?.status !== "ACTIVE" || membership.role !== "MENTEE"))) throw new Error("Only the active mentee who raised this blocker can reopen it.");
   if (blocker.status !== BlockerStatus.RESOLVED) throw new Error("Only a resolved blocker can be reopened.");
@@ -231,7 +336,7 @@ export async function listBlockers(user: SessionUser, organizationId: string, st
   const membership = user.isPlatformSuperAdmin ? null : await prisma.organizationMembership.findUnique({ where: { organizationId_userId: { organizationId, userId: user.id } } });
   if (!user.isPlatformSuperAdmin && membership?.status !== "ACTIVE") throw new Error("Active organization membership is required.");
   if (membership?.role === "OBSERVER") throw new Error("Observers do not have access to individual blocker records.");
-  const where: any = { organizationId, ...(status ? { status } : {}) };
+  const where: any = { organizationId, isSelfTracked: false, ...(status ? { status } : {}) };
   if (membership?.role === "MENTEE") where.menteeId = user.id;
   else if (membership?.role === "MENTOR") {
     const activeEnrollmentPairs = await prisma.cohortEnrollment.findMany({
@@ -252,5 +357,5 @@ export async function listBlockers(user: SessionUser, organizationId: string, st
     cohort: { select: { id: true, name: true, slug: true } },
     mentee: { select: { id: true, name: true, email: true, imageUrl: true } },
     mentor: { select: { id: true, name: true, email: true } },
-  }, orderBy: [{ status: "asc" }, { createdAt: "desc" }] });
+  }, orderBy: [{ status: "asc" }, { createdAt: "desc" }], take: 100 });
 }

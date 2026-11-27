@@ -41,6 +41,7 @@ export default async function OrgLayout({
     activeOrgSlug: org.slug,
     activeOrgName: org.name,
     activeOrgRole: membership?.role ?? (session.isPlatformSuperAdmin ? "ORG_ADMIN" : undefined),
+    selfTrackingEnabled: membership?.status === "ACTIVE" ? membership.selfTrackingEnabled : false,
   };
 
   return (

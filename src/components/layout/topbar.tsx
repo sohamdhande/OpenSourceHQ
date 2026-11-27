@@ -8,6 +8,7 @@ import { useTheme } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
 import { SessionUser } from "@/server/auth/session";
 import { NotificationCenter } from "@/components/layout/notification-center";
+import { SelfTrackingOnboardingModal } from "@/components/self-tracking/self-tracking-onboarding-modal";
 
 interface TopbarProps { user: SessionUser; orgSlug: string }
 
@@ -19,6 +20,7 @@ export function Topbar({ user, orgSlug }: TopbarProps) {
   const [mounted, setMounted] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
+  const [selfTrackingModalOpen, setSelfTrackingModalOpen] = useState(false);
   const commandInputRef = useRef<HTMLInputElement>(null);
   const commandDialogRef = useRef<HTMLDivElement>(null);
 
@@ -57,18 +59,29 @@ export function Topbar({ user, orgSlug }: TopbarProps) {
   }, [commandOpen]);
 
   const isAdmin = user.activeOrgRole === "ORG_ADMIN" || Boolean(user.isPlatformSuperAdmin);
-  const isMentorView = isAdmin ? pathname.startsWith(`/org/${orgSlug}/mentor`) : user.activeOrgRole === "MENTOR";
+  const isStaffEligibleForSelfTracking = user.activeOrgRole === "ORG_ADMIN" || user.activeOrgRole === "MENTOR";
+  const isSelfView = isStaffEligibleForSelfTracking && pathname.startsWith(`/org/${orgSlug}/self`);
+  const isMentorView = !isSelfView && (isAdmin ? pathname.startsWith(`/org/${orgSlug}/mentor`) : user.activeOrgRole === "MENTOR");
   const isMentee = user.activeOrgRole === "MENTEE" || (!user.activeOrgRole && !user.isPlatformSuperAdmin);
   const quickAction = isMentee
     ? { href: `/org/${orgSlug}/student/daily-log`, label: "Submit daily log", icon: Plus }
-    : isMentorView
-      ? { href: `/org/${orgSlug}/mentor/reports`, label: "Review reports", icon: Sparkles }
-      : user.activeOrgRole === "OBSERVER"
-        ? null
-        : { href: `/org/${orgSlug}/admin/members`, label: "Manage members", icon: Plus };
+    : isSelfView
+      ? { href: `/org/${orgSlug}/self/daily-log`, label: "Submit daily log", icon: Plus }
+      : isMentorView
+        ? { href: `/org/${orgSlug}/mentor/reports`, label: "Review reports", icon: Sparkles }
+        : user.activeOrgRole === "OBSERVER"
+          ? null
+          : { href: `/org/${orgSlug}/admin/members`, label: "Manage members", icon: Plus };
 
   const destinations = useMemo(() => {
-    const items = isMentorView ? [
+    const items = isSelfView ? [
+      { href: `/org/${orgSlug}/self`, label: "Self-tracking overview", detail: "Personal open-source hub" },
+      { href: `/org/${orgSlug}/self/daily-log`, label: "Submit daily log", detail: "Personal work log" },
+      { href: `/org/${orgSlug}/self/tasks`, label: "Personal tasks", detail: "Self-managed goals" },
+      { href: `/org/${orgSlug}/self/repositories`, label: "My repositories", detail: "Personal OSS projects" },
+      { href: `/org/${orgSlug}/self/github`, label: "GitHub telemetry", detail: "Commits & pull requests" },
+      ...(isAdmin ? [{ href: `/org/${orgSlug}/admin`, label: "Switch to Admin view", detail: "Organization governance" }] : [{ href: `/org/${orgSlug}/mentor`, label: "Switch to Mentor view", detail: "Cohort supervision" }]),
+    ] : isMentorView ? [
       { href: `/org/${orgSlug}/mentor`, label: "Mentor overview", detail: "Workspace home" },
       { href: `/org/${orgSlug}/mentor/mentees`, label: "Assigned mentees", detail: "People and progress" },
       { href: `/org/${orgSlug}/mentor/reports`, label: "Review reports", detail: "Daily submissions" },
@@ -92,7 +105,7 @@ export function Topbar({ user, orgSlug }: TopbarProps) {
     ];
     const q = commandQuery.trim().toLowerCase();
     return q ? items.filter((item) => `${item.label} ${item.detail}`.toLowerCase().includes(q)) : items;
-  }, [commandQuery, isAdmin, isMentorView, orgSlug, user.activeOrgRole]);
+  }, [commandQuery, isAdmin, isMentorView, isSelfView, orgSlug, user.activeOrgRole]);
 
   const signOut = async () => {
     setLoggingOut(true);
@@ -101,7 +114,13 @@ export function Topbar({ user, orgSlug }: TopbarProps) {
   };
 
   return <>
-    <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-card/95 px-3 backdrop-blur-md md:px-6">
+    <header
+      className={`sticky top-0 z-30 flex h-14 items-center justify-between border-b px-3 md:px-6 ${
+        isSelfView
+          ? "border-white/15 bg-white/[0.06] backdrop-blur-3xl backdrop-saturate-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.22),inset_0_-1px_0_rgba(255,255,255,0.12),0_12px_36px_rgba(0,0,0,0.6)]"
+          : "border-border bg-card/95 backdrop-blur-md"
+      }`}
+    >
       <div className="flex min-w-0 items-center gap-3">
         <div className="hidden min-w-0 items-center gap-2 sm:flex">
           <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500 beacon-live" />
@@ -152,6 +171,33 @@ export function Topbar({ user, orgSlug }: TopbarProps) {
             </Link>
           </div>
         )}
+        {isStaffEligibleForSelfTracking && user.activeOrgId && (
+          user.selfTrackingEnabled ? (
+            <Link
+              href={`/org/${orgSlug}/self`}
+              aria-current={isSelfView ? "page" : undefined}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+                isSelfView
+                  ? "border-emerald-500/40 bg-zinc-950 text-emerald-300 shadow-xs"
+                  : "border-border bg-secondary/60 text-foreground hover:bg-secondary"
+              }`}
+              title="Open personal open-source self-tracking workspace"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="hidden md:inline">My Open Source</span>
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setSelfTrackingModalOpen(true)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-secondary/60 px-2.5 text-xs font-medium text-foreground transition-colors hover:border-emerald-500/40 hover:bg-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              title="Track your own open-source contributions"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="hidden md:inline">My Open Source</span>
+            </button>
+          )
+        )}
         {quickAction && (
           <Link
             href={quickAction.href}
@@ -179,5 +225,13 @@ export function Topbar({ user, orgSlug }: TopbarProps) {
         <div className="flex items-center justify-between border-t border-border px-4 py-2.5 text-[11px] text-muted-foreground"><span>Navigate your workspace</span><span>ESC to close</span></div>
       </div>
     </div>}
+    {isStaffEligibleForSelfTracking && user.activeOrgId && (
+      <SelfTrackingOnboardingModal
+        open={selfTrackingModalOpen}
+        onClose={() => setSelfTrackingModalOpen(false)}
+        orgId={user.activeOrgId}
+        orgSlug={orgSlug}
+      />
+    )}
   </>;
 }
