@@ -218,14 +218,36 @@ export default async function MentorDashboardPage({ params }: { params: { orgSlu
       : Promise.resolve([]),
   ]);
   const trackedRepositoryIds = [...new Set([...memberRepositoryRows, ...cohortRepositoryRows].map((row) => row.repositoryId))];
-  const recentActivities = trackedRepositoryIds.length
+  const recentActivitiesRaw = trackedRepositoryIds.length
     ? await prisma.gitHubActivity.findMany({
         where: { organizationId: org.id, repositoryId: { in: trackedRepositoryIds }, isFixture: false },
-        include: { repository: { select: { fullName: true, url: true } } },
+        include: {
+          repository: { select: { fullName: true, url: true } },
+          githubAccount: {
+            select: {
+              username: true,
+              user: { select: { id: true, name: true } },
+            },
+          },
+        },
         orderBy: { occurredAt: "desc" },
         take: 6,
       })
     : [];
+
+  const recentActivities = recentActivitiesRaw.map((a) => ({
+    id: a.id,
+    title: a.title,
+    summary: a.summary,
+    url: a.url,
+    activityType: a.activityType,
+    isFixture: a.isFixture,
+    occurredAt: a.occurredAt,
+    actorName: a.githubAccount?.user?.name || null,
+    actorUsername: a.githubAccount?.username || null,
+    actorHref: a.githubAccount?.user ? `/org/${params.orgSlug}/mentor/mentees/${a.githubAccount.user.id}` : null,
+    repositoryName: a.repository?.fullName || null,
+  }));
 
   const totalActionsNeeded =
     pendingReports.length +

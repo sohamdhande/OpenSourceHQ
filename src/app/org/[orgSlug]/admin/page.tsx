@@ -18,11 +18,34 @@ export default async function AdminDashboardPage({ params }: { params: { orgSlug
   const { metrics, cohortComparison } = await getOrganizationAnalytics(org.id);
 
   // Recent GitHub Activity
-  const recentActivities = await prisma.gitHubActivity.findMany({
-    where: { organizationId: org.id },
+  const recentActivitiesRaw = await prisma.gitHubActivity.findMany({
+    where: { organizationId: org.id, isFixture: false },
+    include: {
+      repository: { select: { fullName: true } },
+      githubAccount: {
+        select: {
+          username: true,
+          user: { select: { id: true, name: true } },
+        },
+      },
+    },
     orderBy: { occurredAt: "desc" },
     take: 6,
   });
+
+  const recentActivities = recentActivitiesRaw.map((a) => ({
+    id: a.id,
+    title: a.title,
+    summary: a.summary,
+    url: a.url,
+    activityType: a.activityType,
+    isFixture: a.isFixture,
+    occurredAt: a.occurredAt,
+    actorName: a.githubAccount?.user?.name || null,
+    actorUsername: a.githubAccount?.username || null,
+    actorHref: a.githubAccount?.user ? `/org/${params.orgSlug}/mentor/mentees/${a.githubAccount.user.id}` : null,
+    repositoryName: a.repository?.fullName || null,
+  }));
 
   return (
     <div className="space-y-6">

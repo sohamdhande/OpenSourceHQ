@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { GitCommit, GitPullRequest, GitMerge, AlertCircle, MessageSquare, ExternalLink, GitBranch } from "lucide-react";
+import Link from "next/link";
+import { GitCommit, GitPullRequest, GitMerge, AlertCircle, MessageSquare, ExternalLink, GitBranch, User } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
 import { formatDate } from "@/lib/date";
@@ -14,6 +15,10 @@ export interface ActivityItem {
   activityType: string;
   isFixture?: boolean;
   occurredAt: Date | string;
+  actorName?: string | null;
+  actorUsername?: string | null;
+  actorHref?: string | null;
+  repositoryName?: string | null;
 }
 
 export function ActivityTimeline({ items }: { items: ActivityItem[] }) {
@@ -126,6 +131,37 @@ export function ActivityTimeline({ items }: { items: ActivityItem[] }) {
                   </span>
                 </div>
               </div>
+
+              {(item.actorName || item.actorUsername || item.repositoryName) && (
+                <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                  {(item.actorName || item.actorUsername) && (
+                    item.actorHref ? (
+                      <Link
+                        href={item.actorHref}
+                        className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+                      >
+                        <User className="w-3 h-3 shrink-0" />
+                        <span>{item.actorName || `@${item.actorUsername}`}</span>
+                        {item.actorName && item.actorUsername && (
+                          <span className="font-mono text-[10px] text-muted-foreground">
+                            @{item.actorUsername}
+                          </span>
+                        )}
+                      </Link>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 font-medium text-foreground/90">
+                        <User className="w-3 h-3 shrink-0 text-muted-foreground" />
+                        <span>{item.actorName || `@${item.actorUsername}`}</span>
+                      </span>
+                    )
+                  )}
+                  {item.repositoryName && (
+                    <span className="font-mono text-[10px] text-muted-foreground rounded bg-muted/60 px-1.5 py-0.5">
+                      {item.repositoryName}
+                    </span>
+                  )}
+                </div>
+              )}
 
               {item.summary && (
                 <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
