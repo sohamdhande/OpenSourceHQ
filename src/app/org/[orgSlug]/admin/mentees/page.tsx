@@ -39,6 +39,7 @@ export default async function AdminMenteesPage({ params }: { params: { orgSlug: 
                   <th className="py-2.5 font-semibold">Cohort</th>
                   <th className="py-2.5 font-semibold">GitHub</th>
                   <th className="py-2.5 font-semibold">Status</th>
+                  <th className="py-2.5 font-semibold text-right">Profile</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/40">
@@ -68,6 +69,14 @@ export default async function AdminMenteesPage({ params }: { params: { orgSlug: 
                       </td>
                       <td className="py-3">
                         <Badge variant="outline">{m.status}</Badge>
+                      </td>
+                      <td className="py-3 text-right">
+                        <Link
+                          href={`/org/${params.orgSlug}/mentor/mentees/${m.user.id}`}
+                          className="inline-flex items-center gap-1 rounded border border-border bg-secondary/60 px-2.5 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-secondary hover:text-primary"
+                        >
+                          View Profile →
+                        </Link>
                       </td>
                     </tr>
                   );
